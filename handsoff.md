@@ -1,6 +1,6 @@
 # HANDOFF：車長班表前後端分離重構（進度交接）
 
-> 本檔供新對話接續進度用。工作目錄：`C:\Users\User\Documents\預設專案`（目前**不是** git repo）。
+> 本檔供新對話接續進度用。工作目錄：`C:\Users\User\Documents\預設專案`（**已是 git repo**，remote = https://github.com/JHC63/crew-schedule ，branch `main`）。
 > `.claspignore` 已排除 `*.md`，此檔不會被推上 GAS。
 
 ---
@@ -33,6 +33,8 @@ Google Sheet：Staff / Schedule / Schedule_S / Station
 ## 2. 環境備忘
 
 - Node：`C:\Program Files\nodejs\node.exe`；Chrome 158：`C:\Program Files\Google\Chrome\Application\chrome.exe`；clasp 已安裝。
+- Git 2.56.1：`C:\Program Files\Git\cmd\git.exe`；gh CLI 2.105.0（帳號 `JHC63`，已 `gh auth login`）。**新裝的工具要重整 PATH**：`$env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')`。
+- GitHub Pages：https://jhc63.github.io/crew-schedule/ ；GAS `/exec`：https://script.google.com/macros/s/AKfycbxMevgb-gMenHgMG737cQDJwIBwTPOV64CAy4PilPkbR3H1I5IwYDWkgDV-upmSRL8jCQ/exec （= 部署 AKfycbxMevgb… @34）。
 - PowerShell **5.1** 主控台會把中文輸出變亂碼：讀檔要用 `-Encoding UTF8`、�幫 Node/Chrome 輸出留檔用 `cmd /c "... > %TEMP%\opencode\xxx.txt 2>&1"`（raw bytes，再用讀檔工具看），或直接用讀檔工具。
 - `.ps1` 一律 **UTF-8 with BOM**（PowerShell 5.1 否則把中文讀成 ANSI）；`.gs`/`.html`/`docs/*` 是 UTF-8 無 BOM。
 - 暫存工作區：`%TEMP%\opencode`（已核可）。
@@ -72,7 +74,27 @@ Google Sheet：Staff / Schedule / Schedule_S / Station
   - `window.__LIFF_READY__` → `window.__APP_READY__`；錯誤訊息指向 `docs/config.js`。
 - **驗證方式（煙霧測試藍圖在 `%TEMP%\opencode\step3-smoke.js`）**：把 `docs/index.html` + `docs/styles.css` + `docs/config.js`（覆寫 `API_URL='mock://local'`）+ `test/mocks.js` + `test/data.js` + `Code.gs` + `LiffApi.gs` + fetch mock（攔截 fetch、`apiCall`、回 `{ok:true,status:200,text,json}`）+ `docs/app.js` 合成單頁，Chrome headless 跑 → 11 項全 PASS（含 datalist、當月班表、14 列所有班表、bootstrap/mySchedule 經 fetch、快取已寫入、零 JS 錯誤）。
 
+### Step 3.5：SPREADSHEET_ID 改存 Script Properties（已完成，2026/11/24）
+- `Code.gs`：`CONFIG.SPREADSHEET_ID` 從寫死字串改為 getter（`getRequiredProperty_('SPREADSHEET_ID')`），與 `LINE_TOKEN` 同模式；所有 `CONFIG.SPREADSHEET_ID` 用法零改動。
+- `test/mocks.js`：PropertiesService mock 補回 `SPREADSHEET_ID`（同值），三套測試全過（48 queries / 15 API / 24 API+Chrome ALL PASSED / 68 UI ALL PASSED）；`results.txt` 與 baseline 差異仍只有（LIFF）文案。
+- **使用者已手動在 GAS「專案設定 ⚙️ → 指令碼屬性」新增 `SPREADSHEET_ID`**（部署 v34 前完成）。
+- 檔案內已無任何秘密（token、試算表 ID 都不在原始碼）→ repo 可公開。
+
+### Step 4：GitHub Pages + CORS 實測（已完成，2026/11/24）
+- 工具：winget 安裝 **Git 2.56.1**（`C:\Program Files\Git\cmd\git.exe`）+ **GitHub CLI 2.105.0**；使用者以彈出視窗完成 `gh auth login`（帳號 **JHC63**）。
+- git 身分：`user.name=JHC63`、`user.email=216995039+JHC63@users.noreply.github.com`。
+- Repo：https://github.com/JHC63/crew-schedule （public，`gh repo create crew-schedule --public --source . --push`）。
+- `.gitignore`：排除 `test/_preview.html`、`test/_preview-dom.html`、`test/_api-test.html`、`test/results.txt`（產生物）。
+- Pages：API 啟用（`POST /repos/.../pages`，`source: main + /docs`）→ **https://jhc63.github.io/crew-schedule/**（build 一次即 built）。
+- GAS 部署：`clasp deploy -i AKfycbxMevgb-gMenHgMG737cQDJwIBwTPOV64CAy4PilPkbR3H1I5IwYDWkgDV-upmSRL8jCQ -d v2.0.0_JSON_API` → **@34 原地重建**，`/exec` 網址不變。
+- 實測結果（全數通過）：
+  - `GET /exec` → `{"ok":true,"data":{"service":"crew-schedule-api","version":"2.0.0"}}`
+  - `POST /exec`（text/plain，bootstrap）→ `{"ok":true,"data":{...15 位車長...}}`，`SPREADSHEET_ID` 屬性讀取正常
+  - 瀏覽器（jhc63.github.io）：**只有 POST、無 OPTIONS**；302（ACAO `*`）→ echo 200（ACAO `*`）；console 零錯誤；bootstrap／allSchedules／mySchedule 真資料渲染成功（姓名「琬美」實測：今日例假、11/25 025-1 14:40–07:42(+1)）。
+  - JSONP／代理備案**不需要**。
+
 ### Step 3：build-preview.ps1 改讀 docs/（已完成，UI ALL PASSED 68 項）
+
 - `test/build-preview.ps1`：來源改讀 `docs/index.html`/`styles.css`/`config.js`/`app.js`；三個 marker（`<link rel="stylesheet" href="styles.css">`、`<script src="config.js"></script>`、`<script src="app.js"></script>`）缺一即 throw；config 內嵌後注入 `window.APP_CONFIG.API_URL='mock://local'`；`<script src="app.js">` 位置改放後端 bundle（mocks/data/Code.gs/LiffApi.gs）+ **fetch mock**（攔 `window.fetch` → `apiCall`，120ms 延遲，記錄 `__API_CALLS__`）+ selftest + `<script>app.js</script>`；已移除 `$initialJson` 與 `window.MockApi`。全程 PowerShell `.Replace()`（字面替換，`$$` 安全）。
 - 保留：關動畫 style、`__ERRORS__` 收集、`localStorage` 姓名（小林）、hash 導覽/diag/錯誤框、`#test` selftest here-string（選擇器全部沿用，DOM 未變）。
 - 驗證：`--virtual-time-budget=45000` + `#test` → title `UI ALL PASSED`、selftest 框 68 PASS / 0 FAIL、無 preview-errors 框、diag `shell=485`。DOM 留檔 `%TEMP%\opencode\preview-step3-dom.html`。
@@ -82,15 +104,17 @@ Google Sheet：Staff / Schedule / Schedule_S / Station
 
 ## 4. 目前檔案狀態
 
-- `docs/`：`index.html`、`styles.css`、`app.js`、`config.js`、`.nojekyll` ✅
-- `Code.gs`、`LiffApi.gs`：已改為 JSON API + 分流 ✅（未部署，`clasp push` 還沒跑）
+- `docs/`：`index.html`、`styles.css`、`app.js`、`config.js`（**API_URL 已填入 /exec**）、`.nojekyll` ✅
+- `Code.gs`、`LiffApi.gs`：JSON API + 分流 ✅，**已 push 至 GAS 並部署 @34 上線**
+- `SPREADSHEET_ID`：改存 Script Properties（`Code.gs` getter + `test/mocks.js` mock）✅
 - `test/mocks.js`、`test/build-api-test.ps1`：已更新 ✅
-- 根目錄 `LiffApp.html`、`LiffStyles.html`、`LiffScripts.html`：已刪除（Step 3 通過後依計畫刪除）。
+- 根目錄 `LiffApp.html`、`LiffStyles.html`、`LiffScripts.html`：已刪除（**GAS 遠端三個 HTML 仍要到編輯器手動刪**，`clasp push` 不會刪遠端）。
 - `test/build-preview.ps1`：已改寫為讀 `docs/` + fetch mock ✅
 - `test/run.js` 仍只 `eval(Code.gs)`：LINE 路徑夠用，但 Step 5 應改成同時 eval `LiffApi.gs`。
 - `LIFF_README.md`：未更新（測試數仍寫 18 項、`--virtual-time-budget=20000` 不足、部署章節全是舊架構）。
 - `AGENTS.md`：**不存在**（先前對話只規劃過，未寫入）。
 - `appsscript.json`：未動（`executeAs: USER_DEPLOYING`、`access: ANYONE_ANONYMOUS`，維持即可）。
+- `.gitignore`：排除 `test/_preview*.html`、`test/_api-test.html`、`test/results.txt`；repo 已有 2 個 commit（`524dfb5` 重構、`cbfab6e` config API_URL）。
 
 ---
 
@@ -103,6 +127,9 @@ Google Sheet：Staff / Schedule / Schedule_S / Station
 5. 診斷手法（這次很好用）：在組建時對 app.js 注入 `window.__TRACE__` 追蹤點（不改 repo 檔），diag box 印 `READY / CALLS / TRACE / CHIP / MAIN-LEN`；`document.contentType`、`Object.prototype.toString.call(el)` 能快速分辨「文件問題」vs「元素問題」。
 6. 主控台中文亂碼≠檔案壞掉；用 `cmd /c "node ... > file 2>&1"`（raw bytes）再讀檔。
 7. `Get-Content` 行數統計會因 ANSI 解碼吃掉換行而失真（UTF-8 中文被 Big5 配對吞掉 `\n`）；比對檔案用 hash / `fc`（byte 層級）。
+8. **`clasp push` 非互動環境會 `Skipping push.`**（appsscript.json 比對觸發確認提示，沒 TTY 就跳過）→ 一律用 `clasp push --force`。
+9. **GAS 302 轉址的 curl 陷阱**：`/exec` 302 → `script.googleusercontent.com/macros/echo?user_content_key=…`（body 已編碼在 key 裡），echo **只收 GET**。curl 測 POST 要用 `curl -L -H "Content-Type: text/plain" --data-binary @file.json "<exec>"`（`--data` 本身就送 POST、302 後自動轉 GET）；**千萬別加 `-X POST`**（第二跳強制 POST 無 body → 411；`--post302` → 405）。
+10. Chrome headless 對 `--dump-dom` 輸出的中文會亂碼（Big5 console），但比對 `<title>`/PASS 計數用 regex 數即可；`PASS` 計數要把 title 與測試器原始碼字串（`'FAIL  '`、`FAILED`）算進去，與 baseline DOM 同法比對才準。
 
 ---
 
@@ -133,15 +160,10 @@ baseline 留檔：`test/results-baseline.txt`、`%TEMP%\opencode\run-api-baselin
 
 ## 7. 待辦（依序執行）
 
-### Step 3：改寫 `test/build-preview.ps1`（✅ 已完成，見第 3 節；下一步從 Step 4 開始）
-
-### Step 4：GitHub Pages + CORS 實測
-1. 此目錄還不是 git repo → 需 init/commit/push 到 GitHub。
-2. Settings → Pages → Deploy from a branch → `main` + `/docs`。
-3. `docs/config.js` 填入 GAS `/exec` 網址（部署後才有）。
-4. GAS 部署：`clasp push` → 「部署 → 管理部署」建新版本 → 開 `/exec` 應看到 JSON 健康檢查；`curl.exe -L -X POST -H "Content-Type: text/plain" --data '{\"action\":\"bootstrap\",\"payload\":{}}' "<exec>"` 應回 `{"ok":true,...}`。
-5. DevTools 驗證：**只有一個 POST、沒有 OPTIONS**、302→200 JSON。若 302 後 CORS 錯誤 → 確認 `ANYONE_ANONYMOUS`；再不行走 JSONP/代理備案。
-6. 若仍有 LINE LIFF：Endpoint URL 改指 GitHub Pages 網址。
+### Step 3：改寫 `test/build-preview.ps1`（✅ 已完成，見第 3 節）
+### Step 4：GitHub Pages + CORS 實測（✅ 已完成，見第 3 節 Step 3.5/Step 4）
+- **剩使用者手動**：LINE Developers Console → LIFF app 的 Endpoint URL 改指 `https://jhc63.github.io/crew-schedule/`。
+- **剩 GAS 編輯器手動**：刪除遠端三個舊 HTML（`LiffApp.html`、`LiffStyles.html`、`LiffScripts.html`）。
 
 ### Step 5：Node 測試同步
 - `test/run.js`：改為 `eval(code + '\n' + api)`（讀入 `LiffApi.gs`；`doPost` 分流的 API/解析錯誤路徑需要 `jsonResponse_`）。
