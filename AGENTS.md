@@ -40,10 +40,17 @@ Google Sheet：Staff / Schedule / Schedule_S / Station
 | `Code.gs` | 班表計算核心＋LINE Bot＋`doPost` 分流器 |
 | `LiffApi.gs` | `doGet`／`apiCall`／`handleApiRequest_`／`jsonResponse_`＋全部 JSON API handler |
 | `docs/` | 靜態前端（無 GAS 模板語法、無 `google.script.run`、無 `MockApi`） |
-| `docs/config.js` | `window.APP_CONFIG = { API_URL, BOOTSTRAP_CACHE_TTL_MS }`——會公開，不放秘密 |
+| `docs/config.js` | `window.APP_CONFIG = { API_URL, BOOTSTRAP_CACHE_TTL_MS, TIMETABLE_VERSION }`——會公開，不放秘密 |
+| `docs/affected*.html/js/css` | 主管用「受影響列車」獨立頁（見下方「受影響列車頁」節；不進 LIFF、不從首頁連結） |
+| `docs/data/timetable.json` | 受影響列車頁的時刻表（`tools/build-timetable.js` 產生物，會 push 上 Pages） |
+| `docs/1161125GeneralTrainTimetable.json` | TDX 定期時刻表原始檔（954 車次；建置 `timetable.json` 的輸入） |
+| `tools/build-timetable.js` | 匯入腳本：Schedule_S CSV＋TDX JSON → `docs/data/timetable.json`＋報告＋自動更新 `TIMETABLE_VERSION` |
+| `tools/timetable-overrides.example.json` | 人工補對照格式範本（實檔 `timetable-overrides.json` 存在才會被合併） |
+| `tools/station-kms.json` | Station 表 站名→KM（站碼排序驗證用） |
 | `appsscript.json` | V8、`executeAs: USER_DEPLOYING`、`access: ANYONE_ANONYMOUS`（維持不動） |
-| `test/` | 本機測試（`.gitignore` 排除 `test/_preview*.html`、`test/_api-test.html`、`test/results.txt` 產生物） |
+| `test/` | 本機測試（`.gitignore` 排除 `test/_preview*.html`、`test/_api-test.html`、`test/_affected-*.html`、`test/results.txt`、`tools/reports/` 產生物） |
 | `handsoff.md` | 進度交接記錄（重構過程全記錄） |
+| `affected-plan.md` | 「受影響列車」功能完整規格（§5 計算流程、§13 邊界、§16 步驟） |
 | `LIFF_README.md` | 使用者／部署導向的說明 |
 
 - 秘密：`LINE_TOKEN`、`SPREADSHEET_ID` 都在 GAS「指令碼屬性」（Script Properties），
@@ -66,6 +73,15 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\test\build-api-test.ps1
 # 4. 前端 UI self-test（68 項）；檢查 <title>UI ALL PASSED</title>
 powershell -NoProfile -ExecutionPolicy Bypass -File .\test\build-preview.ps1
 & 'C:\Program Files\Google\Chrome\Application\chrome.exe' --headless=new --disable-gpu --allow-file-access-from-files --window-size=500,900 --virtual-time-budget=45000 --dump-dom "file:///C:/Users/User/Documents/預設專案/test/_preview.html#test"
+
+# 5. 受影響列車：純邏輯測試（57 項）；全過輸出 AFF CORE ALL PASSED
+node test\run-affected.js
+
+# 6. 受影響列車：頁面測試（34 項；組頁＋headless Chrome）；檢查 <title>AFF PAGE ALL PASSED</title>
+node test\run-affected-page.js
+
+# 7. 受影響列車：重產時刻表（改了 CSV／補了 overrides 之後）
+cmd /c "node tools\build-timetable.js --csv `"C:\Users\User\Documents\佳合資料夾\道路駕駛路線\班表查詢 - Schedule_S.csv`" --tdx `"docs\1161125GeneralTrainTimetable.json`""
 ```
 
 - `test/run.js`、`test/run-api.js` 用 `eval(code + '\n' + api)` 同時載入 `Code.gs`＋`LiffApi.gs`
@@ -142,6 +158,26 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\test\build-preview.ps1
 - **顯示名稱**：狀態查詢的「中場」顯示為「非值乘」（`STATUS_DISPLAY_NAMES`）。
 - **查詢上限**：`CONFIG.MAX_QUERY_DAYS = 14`；`staffSchedule`／`trainLookup` 的 `dates[]` 會排序去重再套上限。
 - **`allTrains` 排序**：開車時間 → 起站（`localeCompare('zh-Hant')`）→ 抵達時間 → 車次；後端快取 120 秒。
+
+## 受影響列車頁（主管用，docs/affected*.html/js/css）
+
+規格全文見 `affected-plan.md`。重點：
+
+- **純前端**：不新增 GAS action（`apiCall` 10 個 action 凍結）；API 只用現有
+  `bootstrap`＋`staffSchedule`（names[] 每 10 人一批、並行 4；真實 114 人＝12 批約 15 秒，頁面開啟即背景預載）。
+- **三層模型**：L1 篩選（timetable.json 停靠序列＋站序內插）→ L2 對人（班表 segments 的上／下車站序
+  與事故區間比對）→ L3 影響鏈（緩衝時間＝下一班出發＋下一班自身延誤−本班抵達−本班延誤；門檻嚴格 `<`）。
+- **母體**＝當日班表出現的車次（正規化後）∩ timetable.json——沒車長值乘的車次不列。
+- **車次正規化**（與 `tools/build-timetable.js` 同規則）：去「便」後綴、去括號附註（`3148(3146)`→3148）；
+  **A/B 後綴（115A 等）是折返續開腿，不可自動退基數**（基數車是反方向／另一班），一律進
+  `tools/reports/unmatched.txt` 人工補（`tools/timetable-overrides.json`）。
+- **時間一律「營運日 00:00 起算分鐘數」，跨夜 >1440**（timetable.json 與班表 segments 皆如此；
+  頁面以 `minOfDay(ms)` 對齊台北當日 00:00）。
+- **純邏輯在 `docs/affected-core.js`**（掛 `window.AFFECTED_CORE`，Node 可 `require`）——
+  改 L1/L2/L3 規則先改 core＋跑 `test/run-affected.js`，再動 affected.js。
+- 延誤情境存 `localStorage`（`crew-schedule:affected:v1`，換天自動重置）；不上傳、無伺服器狀態。
+- `docs/config.js` 的 `TIMETABLE_VERSION` 是 timetable.json 的 cache-busting，**由 build-timetable.js 自動更新**。
+- 頁面網址 `https://jhc63.github.io/crew-schedule/affected.html`（書籤用，不連結、不宣傳）。
 
 ## 手動事項（無法自動化）
 

@@ -1,5 +1,7 @@
-# 產生物（由 build-*.ps1 / run.js 產生，不進版控）
+# 產生物（由 build-*.ps1 / run.js / run-affected-page.js 產生，不進版控）
 test/_preview.html
 test/_preview-dom.html
 test/_api-test.html
+test/_affected-*.html
 test/results.txt
+tools/reports/

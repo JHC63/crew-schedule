@@ -1,0 +1,992 @@
+{
+  "meta": {
+    "generatedAt": "2026-11-25T06:20:01.202Z",
+    "srcUpdateTime": "2026-11-24T13:51:48+08:00",
+    "effectiveDate": "2026-07-01",
+    "expireDate": "2026-12-31"
+  },
+  "stations": [
+    {
+      "id": "0930",
+      "name": "七堵",
+      "pos": 0,
+      "inStationTable": true
+    },
+    {
+      "id": "0980",
+      "name": "南港",
+      "pos": 1,
+      "inStationTable": true
+    },
+    {
+      "id": "1210",
+      "name": "新竹",
+      "pos": 2,
+      "inStationTable": true
+    },
+    {
+      "id": "3220",
+      "name": "后里",
+      "pos": 3,
+      "inStationTable": true
+    },
+    {
+      "id": "3360",
+      "name": "彰化",
+      "pos": 4,
+      "inStationTable": true
+    },
+    {
+      "id": "3470",
+      "name": "斗六",
+      "pos": 5,
+      "inStationTable": true
+    },
+    {
+      "id": "3480",
+      "name": "林內",
+      "pos": 6,
+      "inStationTable": false
+    },
+    {
+      "id": "4060",
+      "name": "民雄",
+      "pos": 7,
+      "inStationTable": true
+    },
+    {
+      "id": "4080",
+      "name": "嘉義",
+      "pos": 8,
+      "inStationTable": true
+    },
+    {
+      "id": "5050",
+      "name": "潮州",
+      "pos": 9,
+      "inStationTable": true
+    }
+  ],
+  "trains": [
+    {
+      "no": "154",
+      "type": "區間快",
+      "typeCode": "50",
+      "headsign": "往南港",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4080",
+          1193,
+          1193
+        ],
+        [
+          "4060",
+          1199,
+          1200
+        ],
+        [
+          "3470",
+          1215,
+          1216
+        ],
+        [
+          "3360",
+          1249,
+          1250
+        ],
+        [
+          "1210",
+          1321,
+          1322
+        ],
+        [
+          "0980",
+          1381,
+          1381
+        ]
+      ]
+    },
+    {
+      "no": "1288",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往七堵",
+      "extraTrain": true,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "0980",
+          1437,
+          1437
+        ],
+        [
+          "0930",
+          1457,
+          1457
+        ]
+      ]
+    },
+    {
+      "no": "125",
+      "type": "自強",
+      "typeCode": "10",
+      "headsign": "往嘉義",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 0,
+        "sun": 0,
+        "holiday": 0
+      },
+      "note": "逢週一至週五行駛。",
+      "stops": [
+        [
+          "0930",
+          745,
+          745
+        ],
+        [
+          "3360",
+          911,
+          912
+        ],
+        [
+          "4080",
+          977,
+          977
+        ]
+      ]
+    },
+    {
+      "no": "2204",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往彰化",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4080",
+          759,
+          759
+        ],
+        [
+          "4060",
+          770,
+          771
+        ],
+        [
+          "3480",
+          789,
+          790
+        ],
+        [
+          "3470",
+          794,
+          795
+        ],
+        [
+          "3360",
+          851,
+          851
+        ]
+      ]
+    },
+    {
+      "no": "2193",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往嘉義",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "3360",
+          943,
+          943
+        ],
+        [
+          "3470",
+          1002,
+          1003
+        ],
+        [
+          "3480",
+          1008,
+          1009
+        ],
+        [
+          "4060",
+          1028,
+          1029
+        ],
+        [
+          "4080",
+          1039,
+          1039
+        ]
+      ]
+    },
+    {
+      "no": "175",
+      "type": "自強",
+      "typeCode": "10",
+      "headsign": "往潮州",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4080",
+          1178,
+          1178
+        ],
+        [
+          "5050",
+          1301,
+          1301
+        ]
+      ]
+    },
+    {
+      "no": "116",
+      "type": "自強",
+      "typeCode": "10",
+      "headsign": "往嘉義",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "5050",
+          530,
+          530
+        ],
+        [
+          "4080",
+          635,
+          635
+        ]
+      ]
+    },
+    {
+      "no": "105",
+      "type": "自強",
+      "typeCode": "10",
+      "headsign": "往潮州",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4080",
+          647,
+          647
+        ],
+        [
+          "5050",
+          771,
+          771
+        ]
+      ]
+    },
+    {
+      "no": "3222",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往嘉義",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "5050",
+          848,
+          848
+        ],
+        [
+          "4080",
+          1064,
+          1064
+        ]
+      ]
+    },
+    {
+      "no": "3238",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往斗六",
+      "extraTrain": true,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4080",
+          1153,
+          1153
+        ],
+        [
+          "4060",
+          1163,
+          1164
+        ],
+        [
+          "3480",
+          1180,
+          1181
+        ],
+        [
+          "3470",
+          1185,
+          1185
+        ]
+      ]
+    },
+    {
+      "no": "102",
+      "type": "自強",
+      "typeCode": "10",
+      "headsign": "往彰化",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "3470",
+          297,
+          297
+        ],
+        [
+          "3360",
+          338,
+          338
+        ]
+      ]
+    },
+    {
+      "no": "2103",
+      "type": "區間快",
+      "typeCode": "50",
+      "headsign": "往嘉義",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "3360",
+          424,
+          424
+        ],
+        [
+          "4060",
+          504,
+          505
+        ],
+        [
+          "4080",
+          514,
+          514
+        ]
+      ]
+    },
+    {
+      "no": "152",
+      "type": "自強",
+      "typeCode": "10",
+      "headsign": "往彰化",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4080",
+          1228,
+          1228
+        ],
+        [
+          "3360",
+          1287,
+          1287
+        ]
+      ]
+    },
+    {
+      "no": "114",
+      "type": "自強",
+      "typeCode": "10",
+      "headsign": "往新竹",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "3360",
+          630,
+          630
+        ],
+        [
+          "1210",
+          709,
+          709
+        ]
+      ]
+    },
+    {
+      "no": "123",
+      "type": "自強",
+      "typeCode": "10",
+      "headsign": "往嘉義",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "1210",
+          790,
+          790
+        ],
+        [
+          "3360",
+          872,
+          873
+        ],
+        [
+          "4080",
+          936,
+          936
+        ]
+      ]
+    },
+    {
+      "no": "3010",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往彰化",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4080",
+          831,
+          831
+        ],
+        [
+          "4060",
+          841,
+          842
+        ],
+        [
+          "3480",
+          860,
+          861
+        ],
+        [
+          "3470",
+          865,
+          866
+        ],
+        [
+          "3360",
+          920,
+          920
+        ]
+      ]
+    },
+    {
+      "no": "3029",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往嘉義",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "3360",
+          974,
+          974
+        ],
+        [
+          "3470",
+          1016,
+          1017
+        ],
+        [
+          "3480",
+          1021,
+          1022
+        ],
+        [
+          "4060",
+          1035,
+          1036
+        ],
+        [
+          "4080",
+          1043,
+          1043
+        ]
+      ]
+    },
+    {
+      "no": "3257",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往潮州",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4080",
+          1144,
+          1144
+        ],
+        [
+          "5050",
+          1336,
+          1336
+        ]
+      ]
+    },
+    {
+      "no": "114",
+      "type": "自強",
+      "typeCode": "10",
+      "headsign": "往嘉義",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "5050",
+          450,
+          450
+        ],
+        [
+          "4080",
+          564,
+          564
+        ]
+      ]
+    },
+    {
+      "no": "3178",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往后里",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4080",
+          794,
+          794
+        ],
+        [
+          "4060",
+          806,
+          807
+        ],
+        [
+          "3480",
+          829,
+          830
+        ],
+        [
+          "3470",
+          836,
+          837
+        ],
+        [
+          "3360",
+          902,
+          903
+        ],
+        [
+          "3220",
+          954,
+          954
+        ]
+      ]
+    },
+    {
+      "no": "3257",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往彰化",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "3220",
+          976,
+          976
+        ],
+        [
+          "3360",
+          1027,
+          1027
+        ]
+      ]
+    },
+    {
+      "no": "175",
+      "type": "自強",
+      "typeCode": "10",
+      "headsign": "往嘉義",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "3360",
+          1116,
+          1116
+        ],
+        [
+          "4080",
+          1176,
+          1176
+        ]
+      ]
+    },
+    {
+      "no": "2274",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往民雄",
+      "extraTrain": true,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4080",
+          1196,
+          1196
+        ],
+        [
+          "4060",
+          1205,
+          1205
+        ]
+      ]
+    },
+    {
+      "no": "270A",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往嘉義",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4060",
+          320,
+          320
+        ],
+        [
+          "4080",
+          329,
+          329
+        ]
+      ]
+    },
+    {
+      "no": "270",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往彰化",
+      "extraTrain": false,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "4080",
+          352,
+          352
+        ],
+        [
+          "4060",
+          360,
+          361
+        ],
+        [
+          "3480",
+          375,
+          376
+        ],
+        [
+          "3470",
+          379,
+          380
+        ],
+        [
+          "3360",
+          423,
+          423
+        ]
+      ]
+    },
+    {
+      "no": "191",
+      "type": "區間",
+      "typeCode": "31",
+      "headsign": "往嘉義",
+      "extraTrain": true,
+      "serviceDay": {
+        "mon": 1,
+        "tue": 1,
+        "wed": 1,
+        "thu": 1,
+        "fri": 1,
+        "sat": 1,
+        "sun": 1,
+        "holiday": 1
+      },
+      "note": "",
+      "stops": [
+        [
+          "3360",
+          475,
+          475
+        ],
+        [
+          "4080",
+          523,
+          523
+        ]
+      ]
+    }
+  ]
+}

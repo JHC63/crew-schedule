@@ -1,0 +1,272 @@
+/* ============================================================
+   受影響列車（主管用獨立頁）——桌面優先
+   設計權杖與 docs/styles.css 一致（此頁不載入 styles.css）
+   ============================================================ */
+:root {
+  --green: #06c755;
+  --green-dark: #04a847;
+  --green-deep: #05803f;
+  --green-soft: #e9f9ef;
+  --ink: #14221a;
+  --ink-2: #35473d;
+  --muted: #71827a;
+  --muted-2: #93a29a;
+  --line: #e7eee9;
+  --line-soft: #f0f5f2;
+  --bg: #f3f6f4;
+  --card: #ffffff;
+  --blue: #3b82f6;
+  --blue-soft: #eaf2ff;
+  --amber: #f0a11c;
+  --amber-soft: #fff6e5;
+  --purple: #8b5cf6;
+  --purple-soft: #f2edff;
+  --red: #d94a3d;
+  --red-soft: #fff0ee;
+  --radius: 18px;
+  --shadow: 0 10px 26px rgba(17, 43, 28, 0.055);
+  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans TC",
+    "PingFang TC", "Microsoft JhengHei", "Heiti TC", sans-serif;
+  --mono: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  font-family: var(--font);
+  color: var(--ink);
+  background:
+    radial-gradient(80% 60% at 15% 0%, #ddebe2 0%, transparent 60%),
+    radial-gradient(60% 50% at 90% 10%, #e3eef8 0%, transparent 55%),
+    #e9efeb;
+  -webkit-font-smoothing: antialiased;
+}
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; border: 0; background: none; padding: 0; }
+input, select, button { -webkit-appearance: none; appearance: none; }
+button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+/* ---------- 外殼（桌面優先，寬版） ---------- */
+.page {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 22px 26px 56px;
+}
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-logo {
+  width: 44px; height: 44px;
+  display: grid; place-items: center;
+  border-radius: 13px;
+  background: linear-gradient(135deg, var(--green), var(--green-deep));
+  color: #fff; font-weight: 700; font-size: 20px;
+  box-shadow: var(--shadow);
+}
+.brand-sub { margin: 0; font-size: 10px; letter-spacing: 0.16em; color: var(--muted-2); font-weight: 600; }
+.brand-title { margin: 0; font-size: 21px; line-height: 1.2; letter-spacing: 0.02em; }
+.today {
+  font-size: 13px; color: var(--ink-2);
+  background: var(--card); border-radius: 12px; padding: 8px 14px;
+  box-shadow: var(--shadow); white-space: nowrap;
+}
+.today b { font-weight: 700; }
+
+/* ---------- 卡片 ---------- */
+.card {
+  background: var(--card);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
+  margin-bottom: 14px;
+}
+.card-title { margin: 0 0 10px; font-size: 15px; letter-spacing: 0.02em; }
+
+/* ---------- 表單 ---------- */
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px 14px;
+}
+.field { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.field-label { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; }
+.field select, .field input {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #fff;
+  font-size: 14px;
+  color: var(--ink);
+}
+.field select:focus, .field input:focus { outline: 2px solid var(--green-soft); border-color: var(--green); }
+.buffer-wrap { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.buffer-wrap input { flex: 1; min-width: 0; }
+.field-time input { font-variant-numeric: tabular-nums; }
+
+.switches { display: flex; flex-wrap: wrap; gap: 8px 22px; margin-top: 12px; }
+.switch {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; color: var(--ink-2);
+  cursor: pointer; user-select: none;
+}
+.switch input { width: 16px; height: 16px; accent-color: var(--green-dark); }
+
+.form-actions { display: flex; align-items: center; gap: 10px; margin-top: 14px; }
+.spacer { flex: 1; }
+.btn {
+  padding: 9px 18px;
+  border-radius: 12px;
+  background: #fff;
+  border: 1px solid var(--line);
+  font-size: 14px; font-weight: 600; color: var(--ink-2);
+  box-shadow: 0 1px 2px rgba(17, 43, 28, 0.05);
+}
+.btn:hover:not(:disabled) { border-color: var(--muted-2); }
+.btn.primary {
+  background: linear-gradient(135deg, var(--green), var(--green-dark));
+  border-color: transparent;
+  color: #fff;
+  padding: 9px 26px;
+}
+.tt-meta { margin: 10px 2px 0; font-size: 11px; color: var(--muted-2); line-height: 1.6; }
+
+/* ---------- 警告 ---------- */
+.warnbox {
+  background: var(--amber-soft);
+  border: 1px solid #f3dcab;
+  border-radius: var(--radius);
+  padding: 11px 16px;
+  margin-bottom: 14px;
+  font-size: 13px; line-height: 1.7; color: #7a5410;
+}
+.warnbox.error { background: var(--red-soft); border-color: #f2c4be; color: #8c2f26; }
+
+/* ---------- 統計列 ---------- */
+.stats { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; font-size: 14px; color: var(--muted); }
+.stats b { font-size: 20px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; margin-left: 2px; }
+.stats .sep { color: var(--line); }
+
+/* ---------- 表格 ---------- */
+.table-wrap { overflow-x: auto; }
+table.grid { width: 100%; border-collapse: collapse; font-size: 13px; }
+table.grid th, table.grid td {
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--line-soft);
+  text-align: left;
+  white-space: nowrap;
+}
+table.grid th {
+  font-size: 11px; font-weight: 700; color: var(--muted);
+  letter-spacing: 0.05em;
+  border-bottom: 2px solid var(--line);
+}
+table.grid tbody tr:hover { background: #fafdfb; }
+table.grid td.num, table.grid th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.grid .placeholder { color: var(--muted); padding: 14px 10px; white-space: normal; }
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px; font-weight: 600;
+}
+.badge.stop { background: var(--green-soft); color: var(--green-deep); }
+.badge.est { background: var(--amber-soft); color: #8a5c0d; }
+.badge.ok { background: var(--green-soft); color: var(--green-deep); }
+.badge.short { background: var(--amber-soft); color: #8a5c0d; }
+.badge.miss { background: var(--red-soft); color: #8c2f26; }
+
+/* ---------- 影響鏈 ---------- */
+#chainBox .placeholder { color: var(--muted); margin: 4px 2px; font-size: 13px; }
+.chain-block { padding: 4px 2px 10px; }
+.chain-head { font-size: 13px; font-weight: 700; margin-bottom: 6px; }
+.chain-row { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 13px; padding: 3px 0 3px 14px; color: var(--ink-2); }
+.chain-row .mono { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.chain-row.warn { color: #8a5c0d; }
+.chain-row.miss { color: #8c2f26; font-weight: 600; }
+
+.foot { margin-top: 18px; font-size: 11px; color: var(--muted-2); line-height: 1.7; }
+
+/* ---------- 徽章補充 ---------- */
+.badge.muted { background: var(--line-soft); color: var(--muted); }
+.badge.warn { background: var(--amber-soft); color: #8a5c0d; }
+.badge.hot { background: var(--red-soft); color: #8c2f26; }
+
+/* ---------- 查詢進度 ---------- */
+.query-status { margin: 6px 2px 0; font-size: 12px; color: var(--blue); min-height: 1em; }
+
+/* ---------- 車次卡工具列（全部套用／清除延誤） ---------- */
+.card-title-row {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+}
+.card-title-row .card-title { margin: 0 0 10px; }
+.bulk-tools { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.bulk-label, .bulk-unit { font-size: 12px; color: var(--muted); font-weight: 600; }
+.bulk-tools input {
+  width: 64px; padding: 6px 8px;
+  border: 1px solid var(--line); border-radius: 9px;
+  font-size: 13px; font-variant-numeric: tabular-nums;
+}
+.btn.small { padding: 6px 12px; font-size: 12px; border-radius: 10px; }
+
+/* ---------- 延誤欄 ---------- */
+.delay-wrap { display: inline-flex; align-items: center; gap: 6px; }
+.delay-input {
+  width: 58px; padding: 5px 7px;
+  border: 1px solid var(--line); border-radius: 9px;
+  font-size: 13px; font-variant-numeric: tabular-nums; text-align: right;
+}
+.delay-input:focus { outline: 2px solid var(--green-soft); border-color: var(--green); }
+.quick { display: inline-flex; gap: 3px; }
+.qbtn {
+  padding: 3px 6px; border-radius: 7px;
+  background: var(--line-soft); color: var(--ink-2);
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.qbtn:hover { background: var(--green-soft); color: var(--green-deep); }
+
+/* ---------- 車長欄／推估時間 ---------- */
+.crew-row { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.approx { color: #8a5c0d; cursor: help; }
+.muted { color: var(--muted); }
+
+/* ---------- 影響鏈補充 ---------- */
+.chain-label { font-weight: 500; color: var(--muted); font-size: 12px; margin-left: 8px; }
+.chain-no { font-weight: 700; font-variant-numeric: tabular-nums; }
+.chain-sec { min-width: 110px; }
+.chain-time { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 12px; }
+.chain-delay { font-variant-numeric: tabular-nums; color: var(--ink); }
+.chain-delay.muted { color: var(--muted); }
+.chain-row.sub { border-top: 1px dashed var(--line-soft); margin-top: 2px; }
+
+/* ---------- 列印（A4 橫式，§12：樣式乾淨，主管通報用） ---------- */
+@page { size: A4 landscape; margin: 10mm; }
+@media print {
+  body { background: #fff; }
+  .page { max-width: none; padding: 0; }
+  .card { box-shadow: none; border: 1px solid #ddd; border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; }
+  .form-card, .query-status, .bulk-tools, .form-actions, #warnBox { display: none !important; }
+  .stats { font-size: 12px; }
+  table.grid { font-size: 11px; }
+  table.grid th, table.grid td { padding: 4px 6px; }
+  .qbtn, .delay-input { border: 0; background: none; }
+  .quick { display: none; }
+  .foot { display: none; }
+  a { text-decoration: none; color: inherit; }
+}
+
+/* ---------- 窄螢幕（仍可用） ---------- */
+@media (max-width: 860px) {
+  .page { padding: 16px 14px 40px; }
+  .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stats b { font-size: 17px; }
+  .card-title-row { flex-direction: column; align-items: flex-start; }
+}

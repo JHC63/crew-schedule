@@ -1,0 +1,16 @@
+{
+  "comment": "人工補對照範本：複製為 tools/timetable-overrides.json 後填入，再重跑 tools/build-timetable.js。stops 欄位 = [站碼, 到達分, 開車分]（營運日 00:00 起算，跨夜 >1440；端點站 arr==dep）。站碼請用 docs/data/timetable.json stations 已有的（或 TDX 查得到的站碼）。",
+  "trains": [
+    {
+      "no": "115A",
+      "type": "自強(推拉式自強號且有自行車車廂)",
+      "typeCode": "4",
+      "headsign": "往基隆",
+      "note": "例：折返續開腿（Schedule_S 七堵→基隆 7:42-7:54），停靠時刻請自行補完整",
+      "stops": [
+        ["0930", 462, 462],
+        ["0900", 474, 474]
+      ]
+    }
+  ]
+}

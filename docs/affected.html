@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f3f6f4">
+  <meta name="color-scheme" content="light">
+  <!-- 主管用獨立頁：不進 LIFF、不從首頁／底部導覽連結，只給書籤（affected-plan.md §2） -->
+  <title>受影響列車</title>
+  <link rel="stylesheet" href="affected.css">
+</head>
+<body>
+  <noscript>
+    <div style="margin:16px;padding:16px;border-radius:14px;background:#fff;font:14px/1.6 sans-serif;color:#14221a">
+      這個頁面需要 JavaScript。請開啟瀏覽器的 JavaScript，或改用 Chrome／Edge 開啟。
+    </div>
+  </noscript>
+
+  <div class="page">
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-logo" aria-hidden="true">影</span>
+        <div>
+          <p class="brand-sub">AFFECTED TRAINS</p>
+          <h1 class="brand-title">受影響列車</h1>
+        </div>
+      </div>
+      <div class="today" id="dateLine">載入中…</div>
+    </header>
+
+    <section class="card form-card" aria-label="查詢條件">
+      <div class="form-grid">
+        <label class="field">
+          <span class="field-label">起站</span>
+          <select id="fromStation" disabled><option>載入中…</option></select>
+        </label>
+        <label class="field">
+          <span class="field-label">迄站</span>
+          <select id="toStation" disabled><option>載入中…</option></select>
+        </label>
+        <label class="field field-time">
+          <span class="field-label">時段起</span>
+          <input type="time" id="timeFrom" value="14:00">
+        </label>
+        <label class="field field-time">
+          <span class="field-label">時段迄</span>
+          <input type="time" id="timeTo" value="16:00">
+        </label>
+        <label class="field">
+          <span class="field-label">方向</span>
+          <select id="direction">
+            <option value="both">雙向</option>
+            <option value="south">南下</option>
+            <option value="north">北上</option>
+          </select>
+        </label>
+        <label class="field field-buffer">
+          <span class="field-label">緩衝時間</span>
+          <span class="buffer-wrap"><input type="number" id="bufferMin" value="10" min="0" max="120" step="1"> 分</span>
+        </label>
+      </div>
+      <div class="form-row switches">
+        <label class="switch"><input type="checkbox" id="includePass" checked><span>包含通過未停靠（推估）</span></label>
+        <label class="switch"><input type="checkbox" id="onlyShort"><span>只看緩衝時間不足</span></label>
+      </div>
+      <div class="form-actions">
+        <button id="btnQuery" class="btn primary" type="button" disabled>查詢</button>
+        <button id="btnReset" class="btn" type="button">重置</button>
+        <span class="spacer"></span>
+        <button id="btnCsv" class="btn" type="button" disabled>匯出 CSV</button>
+        <button id="btnPrint" class="btn" type="button" disabled>列印</button>
+      </div>
+      <p class="tt-meta" id="ttMeta"></p>
+      <p class="query-status" id="queryStatus" aria-live="polite"></p>
+    </section>
+
+    <div id="warnBox" class="warnbox" hidden role="alert"></div>
+
+    <section class="card" aria-label="統計">
+      <div class="stats">
+        <span class="stat">受影響車次 <b id="statTrains">–</b></span>
+        <span class="sep" aria-hidden="true">｜</span>
+        <span class="stat">受影響車長 <b id="statCrew">–</b></span>
+        <span class="sep" aria-hidden="true">｜</span>
+        <span class="stat">緩衝時間不足 <b id="statShort">–</b></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-title-row">
+        <h2 class="card-title">▌車次（依進入區間時間排序）</h2>
+        <div class="bulk-tools">
+          <span class="bulk-label">全部＋</span>
+          <input type="number" id="bulkDelay" min="0" max="600" step="1" value="10">
+          <span class="bulk-unit">分</span>
+          <button id="btnApplyAll" class="btn small" type="button">套用到所有篩選車次</button>
+          <button id="btnClearDelays" class="btn small" type="button">清除所有延誤</button>
+        </div>
+      </div>
+      <div class="table-wrap">
+        <table class="grid" id="trainTable">
+          <thead>
+            <tr>
+              <th>車次</th><th>車種</th><th>方向</th><th>起訖</th><th>進入</th><th>離開</th><th>延誤</th><th>值乘車長</th><th>狀態</th>
+            </tr>
+          </thead>
+          <tbody id="trainBody">
+            <tr class="placeholder"><td colspan="9">請設定條件後按「查詢」。</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2 class="card-title">▌影響鏈</h2>
+      <div id="chainBox">
+        <p class="placeholder">請設定條件後按「查詢」。</p>
+      </div>
+    </section>
+
+    <footer class="foot">
+      延誤情境只存在此瀏覽器的 localStorage，不會上傳；查詢結果供通報參考，發車判斷以行車系統為準。
+    </footer>
+  </div>
+
+  <script src="config.js"></script>
+  <script src="affected-core.js"></script>
+  <script src="affected.js"></script>
+</body>
+</html>
