@@ -1,23 +1,37 @@
-# 車長班表 LIFF 網頁
+# 車長班表網頁版（GitHub Pages + GAS JSON API）
 
-在同一個 Google Apps Script 專案裡，新增一個手機優先的班表網頁。
-原本的 LINE Bot（`doPost`）保留姓名／車次／班表／日夜休查詢，兩邊共用同一份 Staff / Schedule_S 資料。
+車長班表查詢網頁，採「前後端分離」：前端是 GitHub Pages 上的純靜態頁面，
+後端是 Google Apps Script Web App（純 JSON API），兩邊共用同一份 Google Sheet 資料。
 
-- 入口：`doGet`
-- 前端→後端：`google.script.run.apiCall(action, payload)`
-- 不依賴 LIFF SDK，也不強制 LINE 登入
-- 身分識別：第一次開啟時手動選姓名，存在手機的 `localStorage`
+```
+GitHub Pages（docs/：index.html + styles.css + app.js + config.js，純靜態）
+        │ fetch POST（Content-Type: text/plain，body 為 JSON 字串）
+        ▼
+GAS Web App /exec（純 JSON API）
+  doPost(e)：body.events[] → handleLineWebhook_（LINE Bot，Code.gs）
+             body.action   → apiCall(action, payload) → { ok, data | error }
+  doGet(e) ：健康檢查／?action=&payload=（JSON）
+        ▼
+Google Sheet：Staff / Schedule / Schedule_S / Station
+```
+
+- LINE webhook 與網頁 API 共用同一個 `/exec`，`doPost` 以 body 形狀分流（**events 優先於 action**）
+- 前端不依賴 LIFF SDK、不強制 LINE 登入；身分由使用者在頁面選姓名，存在手機的 `localStorage`
+- 班表計算全部沿用 `Code.gs` 既有邏輯，LINE 與網頁共用同一份資料
 
 ## 檔案
 
 | 檔案 | 用途 |
 | --- | --- |
-| `Code.gs` | 既有 LINE Bot 與班表計算核心（LINE 僅留姓名／車次／班表／日夜休查詢） |
-| `LiffApi.gs` | `doGet`、`apiCall` 與所有網頁用 API |
-| `LiffApp.html` | 頁面骨架、SVG icon、底部導覽 |
-| `LiffStyles.html` | 全部 CSS |
-| `LiffScripts.html` | 前端邏輯（原生 JS，無建置流程） |
+| `Code.gs` | 班表計算核心＋LINE Bot（`doPost` 分流器、`handleLineWebhook_`） |
+| `LiffApi.gs` | `doGet`、`apiCall`、`handleApiRequest_`／`jsonResponse_` 與所有網頁用 JSON API |
+| `docs/index.html` | 頁面骨架、SVG icon、底部導覽（無 GAS 模板語法） |
+| `docs/styles.css` | 全部 CSS |
+| `docs/app.js` | 前端邏輯（`fetch(API_URL)`，原生 JS，無建置流程） |
+| `docs/config.js` | `window.APP_CONFIG`（`API_URL`、bootstrap 快取 TTL） |
+| `docs/.nojekyll` | 讓 GitHub Pages 原樣服務檔案 |
 | `test/` | 本機測試工具，不需要部署到 GAS |
+| `appsscript.json` | GAS manifest（V8、executeAs: USER_DEPLOYING、access: ANYONE_ANONYMOUS） |
 
 ## 功能
 
@@ -55,102 +69,144 @@ LINE 視窗**僅保留**：車長姓名、車次、班表、日／夜／休（�
 `Schedule_S` 有、但 `Station` 沒有的站會補在最後。若 `Station` 工作表不存在或格式不符，會退回字母排序。
 `bootstrap` 同時回傳各站 `KM`（`stationKms`），車次頁以此判斷順向／逆向。
 
-## 部署到 GAS
+## 部署
 
-1. 開啟既有的 Apps Script 專案。
-2. 新增下列檔案，檔名必須完全一致：
-   - `LiffApi.gs`
-   - `LiffApp.html`
-   - `LiffStyles.html`
-   - `LiffScripts.html`
-3. 儲存後，選 **部署 → 管理部署**。
-4. 建立／編輯「網頁應用程式」部署：
+### 後端：GAS Web App
+
+1. 推上 GAS：`clasp push --force`（非互動環境一定要 `--force`，否則會 `Skipping push.`）。
+2. 確認 GAS「專案設定 ⚙️ → 指令碼屬性」有 `LINE_TOKEN` 與 `SPREADSHEET_ID`（見下方安全段落）。
+3. 部署／更新「網頁應用程式」：
    - **執行身分**：我
    - **誰可以存取**：所有人
-5. 複製 **網頁應用程式網址**（結尾通常是 `/exec`）。
+   - 原地重建（`/exec` 網址不變）：`clasp deploy -i <deploymentId> -d <描述>`（目前為 `AKfycbxMevgb…` @34）
+4. 複製 `/exec` 網址，填入 `docs/config.js` 的 `API_URL`（目前 `https://script.google.com/macros/s/AKfycbxMevgb-gMenHgMG737cQDJwIBwTPOV64CAy4PilPkbR3H1I5IwYDWkgDV-upmSRL8jCQ/exec`）。
 
-> `doGet` 已設定 `XFrameOptionsMode.ALLOWALL`，才能在 LINE 的 in-app browser / iframe 內正常顯示。
-> 每次修改前端或 `LiffApi.gs` 後，記得建立**新版本**部署，否則 `/exec` 還是舊版。
+> 修改 `Code.gs`／`LiffApi.gs` 後**必須建立新版本部署**，否則 `/exec` 還是舊版。
+> 根目錄的 `.gs` 檔會整個推上 GAS；`docs/`、`test/`、`*.md` 已被 `.claspignore` 排除。
+
+### 前端：GitHub Pages
+
+1. repo 的 Settings → Pages → Source：`main` branch + `/docs` 資料夾（已設定）。
+2. 部署就是 **git push**：推上 `main` 後 Pages 自動建置，1~2 分鐘後
+   <https://jhc63.github.io/crew-schedule/> 更新。
+3. 前端改動（`docs/`）不需要動 GAS；後端改動（`.gs`）不需要動 Pages——兩邊各自獨立部署。
+4. `docs/config.js` 會公開在網路上，只放 `API_URL`，**不可放任何秘密**。
 
 ### 驗證
 
 在瀏覽器直接開 `/exec`：
 
-- 看到「車長班表」首頁 → 後端與前端都正常
-- 看到 Google 登入頁 → 部署存取權不是「所有人」
-- 一片空白 → 開 DevTools Console 看錯誤，通常是檔案沒存或部署沒更新
+- 看到 `{"ok":true,"data":{"service":"crew-schedule-api",...}}` → 後端正常
+- 看到 Google 登入頁（HTML）→ 部署存取權不是「所有人」
+
+前端驗證：<https://jhc63.github.io/crew-schedule/> 能載入首頁、查到班表。
 
 ## 設成 LINE LIFF
 
 1. 到 [LINE Developers Console](https://developers.line.biz/console/) 選你的 Provider / Channel。
-2. 建立 **LIFF app**：
-   - **Endpoint URL**：貼上 GAS 的 `/exec` 網址
+2. LIFF app 設定：
+   - **Endpoint URL**：`https://jhc63.github.io/crew-schedule/`（GitHub Pages，不再是 GAS `/exec`）
    - **Size**：Full
    - **Scopes**：不需要勾選（本頁沒有呼叫 LIFF API）
    - **Open in external browser**：依需求；關閉時會在 LINE 內開啟
-3. 儲存後會得到 `https://liff.line.me/xxxxxxxx`。
-4. 把這個 LIFF 網址放到圖文選單（Rich menu）或群組說明。
+3. 把 LIFF 網址（`https://liff.line.me/xxxxxxxx`）放到圖文選單（Rich menu）或群組說明。
 
-因為沒有使用 `liff.init()`，不需要在 LINE Login Channel 設定 callback，也不會遇到 GAS HtmlService 巢狀 iframe 與 LIFF SDK 的相容性問題。
+因為沒有使用 `liff.init()`，不需要在 LINE Login Channel 設定 callback，也不會遇到 LIFF SDK 與 iframe 的相容性問題。
 
-## 本機測試（不需要 Node.js）
+## CORS 注意事項（重要）
 
-### 1. 後端 API
+GAS Web App 對瀏覽器 fetch 有幾個硬限制，前端是照著這些限制設計的：
+
+1. **只能發「簡單請求」（simple request）**。
+   GAS 沒有 `doOptions`（OPTIONS 一律 405）、`ContentService` 也無法自訂 CORS header，
+   所以**不能**用 `Content-Type: application/json` 或自訂 header——那會觸發 preflight，直接被 CORS 擋掉。
+   前端固定用 `Content-Type: text/plain;charset=utf-8`（簡單請求、不觸發 preflight），body 仍是 JSON 字串。
+2. **GAS 恆回 HTTP 200**。
+   `ContentService` 無法設定狀態碼，錯誤一律以 `{ ok: false, error }` envelope 呈現。
+   前端 `api()` 必須解析 envelope，**不能只看 `response.ok`**。
+3. **302 → echo 的行為**。
+   `/exec` 實際上會 302 轉址到 `script.googleusercontent.com/macros/echo?user_content_key=…`（POST body 編碼在 key 裡），
+   而 echo **只收 GET**。瀏覽器 `fetch(…, { redirect: 'follow' })` 會自動處理（302 與 echo 兩跳都帶 `Access-Control-Allow-Origin: *`，實測可行）。
+   用 curl 測 POST 時要 `curl -L -H "Content-Type: text/plain" --data-binary @file.json "<exec>"`——
+   **千萬別加 `-X POST`**（302 後第二跳會強制 POST 無 body → 411；`--post302` → 405）。
+4. **不可用 `mode: 'no-cors'`**：回應變 opaque，完全讀不到內容。
+
+## 本機測試
+
+### 1. LINE Bot 回覆（Node）
+
+```powershell
+node test\run.js
+```
+
+48 題查詢經 `doPost` 分流器跑完整 LINE 路徑，覆寫 `test/results.txt`；
+與 baseline（`test/results-baseline.txt`）比對，除預期文案外應零差異。
+
+### 2. LIFF API＋分流（Node）
+
+```powershell
+node test\run-api.js
+```
+
+24 項檢查：10 個 action、validation、`doGet` 健康檢查／action 分流，
+以及 `doPost` 分流（API 分流、LINE 分流、**events 優先於 action**、無效 JSON 依 Content-Type 分流、無法辨識格式）。
+
+### 3. 後端完整 API（headless Chrome）
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\test\build-api-test.ps1
 & 'C:\Program Files\Google\Chrome\Application\chrome.exe' `
-  --headless=new --disable-gpu --allow-file-access-from-files `
-  --virtual-time-budget=8000 `
+  --headless=new --disable-gpu --virtual-time-budget=8000 `
   --dump-dom "file:///C:/Users/User/Documents/預設專案/test/_api-test.html"
 ```
 
-預期結果：`ALL PASSED`（目前 18 項，含 `staffDay`／`monthSchedule`／`allSchedules`）。
+預期結果：`ALL PASSED`（24 項，含 `callHttp()`／`callGet()` 分流檢查）。
 
-### 2. 前端互動
+### 4. 前端互動 / UI self-test
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\test\open-preview.ps1
 ```
 
-這會重新產生 `test/_preview.html`，並直接用 **Chrome／Edge** 開啟（避開 IE 或沙箱預覽器），把 GAS 後端換成 `test/mocks.js` + `test/data.js`。
+這會重新產生 `test/_preview.html`（把後端換成 `test/mocks.js` + `test/data.js` + fetch mock），並直接用 Chrome／Edge 開啟。
 
-> 不要直接開 `LiffApp.html`。它含有 GAS 模板語法，沒有後端與樣式，會停在載入骨架。
-> 也不要只開舊的 `_preview.html`；每次改完前端請重新執行 `open-preview.ps1` 或 `build-preview.ps1`。
-> 若頁面停在載入中，5 秒後會顯示「頁面沒有成功啟動」；按 F12 看 Console 的第一個紅色錯誤。
-
-也可以手動開啟 `test/_preview.html`，或用 `-SelfTest` 跑互動測試：
+UI 自動測試：
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\test\open-preview.ps1 -SelfTest
-```
-
-- `test/_preview.html`：首頁
-- `#search`：查詢頁並自動送出一次查詢
-- `#trains`：全部車次並搜尋 `3178`
-- `#name`：姓名底部面板
-- `#test`：自動互動測試，最後顯示 `UI ALL PASSED`
-
-```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\test\build-preview.ps1
 & 'C:\Program Files\Google\Chrome\Application\chrome.exe' `
   --headless=new --disable-gpu --allow-file-access-from-files `
-  --window-size=500,900 --virtual-time-budget=20000 `
+  --window-size=500,900 --virtual-time-budget=45000 `
   --dump-dom "file:///C:/Users/User/Documents/預設專案/test/_preview.html#test"
 ```
 
-截圖放在 `test/screens/`。
+預期 `<title>UI ALL PASSED</title>`（68 項）。截圖放在 `test/screens/`。
 
-> PowerShell 5.1 讀取 `.ps1` 時，若檔案不是 UTF-8 BOM，中文會變亂碼並可能讓內嵌 JS 出現 `SyntaxError`。`test/build-*.ps1` 都已存成 UTF-8 BOM。
+> **`--virtual-time-budget` 必須 ≥ 45000**：UI self-test 的 timer 總量約 25 秒，
+> 20000 會跑不完（title 不變、無錯誤框、無 selftest 框）——這是已知地雷，不是壞了。
+>
+> `test/_preview.html`、`test/_api-test.html`、`test/results.txt` 是產生物（`.gitignore` 已排除），不要手改。
+> PowerShell 5.1 讀 `.ps1` 需要 UTF-8 BOM（`test/build-*.ps1` 都已是）。
+> Chrome headless **不要加 `--user-data-dir`**（Chrome 158 會噴 `Multiple targets are not supported in headless mode` 並輸出空 DOM）。
 
 ## API 一覽
 
-前端統一呼叫：
+前端統一呼叫（`docs/app.js` 的 `api()`）：
 
 ```js
-google.script.run.apiCall('mySchedule', { name: '小林', start: '2026-11-18', days: 7 })
+const res = await fetch(window.APP_CONFIG.API_URL, {
+  method: 'POST',
+  redirect: 'follow',
+  headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+  body: JSON.stringify({ action: 'mySchedule', payload: { name: '小林', days: 7 } })
+});
+const { ok, data, error } = await res.json(); // HTTP 恆 200，要解析 envelope
 ```
 
 回傳固定為 `{ ok: true, data }` 或 `{ ok: false, error }`。
+
+`doGet` 也可直接呼叫（方便瀏覽器／curl 測試）：
+`<exec>?action=bootstrap`，或帶 `?action=status&payload=%7B%22keyword%22%3A%22%E5%80%BC%E4%B9%98%22%7D`（URL-encoded JSON）。
 
 | action | payload | 說明 |
 | --- | --- | --- |
@@ -172,31 +228,34 @@ google.script.run.apiCall('mySchedule', { name: '小林', start: '2026-11-18', d
 
 | 症狀 | 可能原因 / 處理 |
 | --- | --- |
-| 開啟後一直轉圈 | `/exec` 部署的存取權不是「所有人」，或 `apiCall` 沒部署 |
-| `後端尚未連線` | 直接開了本機 HTML；請從 GAS `/exec` 開啟，或使用 `test/_preview.html` |
-| `未知的 API 操作` | `LiffApi.gs` 沒存檔，或部署的是舊版本 |
+| 面板出現 **OPTIONS** 請求且 405，接著 CORS 錯誤 | 前端發了會觸發 preflight 的請求（`application/json` 或自訂 header）。GAS 不支援 OPTIONS；改回 `text/plain` 簡單請求（`docs/app.js` 的 `api()` 已是）。 |
+| 302 之後出現 CORS 錯誤 | 部署存取權不是「所有人」。權限正確時，302 與 echo 兩跳都會帶 `Access-Control-Allow-Origin: *`。 |
+| 直接開 `/exec` 看到 Google **登入頁（HTML）** | 部署存取權不是「所有人」——到「管理部署 → 編輯」把「誰可以存取」改成所有人。 |
+| 頁面一直轉圈／`後端尚未連線` | `docs/config.js` 的 `API_URL` 沒填或填錯；或 GAS 部署不是最新版本。 |
+| `未知的 API 操作` | `LiffApi.gs` 沒 push 上去，或部署的是舊版本。 |
 | 查無班表 | `Staff` 沒有此人、姓名不符、或該群組沒有 `Schedule_S` |
 | `無法查詢基準日以前` | 查詢日期早於 `CONFIG.BASE_DATE`（目前 `2026/07/01`） |
 | 日期選不到 | 日期欄位的 `min` 會鎖在基準日 |
 | 車站選單空白 | `bootstrap` 尚未完成；重新整理或稍等 |
 | 姓名沒被記住 | 無痕模式／瀏覽器封鎖 localStorage；改用一般視窗 |
-| 換日後資料沒變 | `allTrains` 快取 120 秒；按「重新整理」會重新計算 |
-| LINE 內開啟空白 | 部署需允許 iframe；`doGet` 已設 `ALLOWALL`，並確認 LIFF Endpoint 是 `/exec` |
+| 換日後資料沒變 | `allTrains` 快取 120 秒；bootstrap 名單／車站前端快取 6 小時（`docs/config.js` 的 `BOOTSTRAP_CACHE_TTL_MS`） |
+| LINE 內開啟空白 | 先確認 Pages 網址在一般瀏覽器能開；再檢查 LIFF Endpoint URL 是否指向 `https://jhc63.github.io/crew-schedule/` |
 
 ## 安全注意事項
 
-1. **`Code.gs` 內的 LINE Channel Access Token 是明文寫死的，且已出現在原始碼中。**
-   建議立即到 LINE Developers Console **重新發行（Issue）新的 Channel Access Token**，
-   舊 token 會失效；接著把新 token 放進 **專案設定 → 指令碼屬性**，例如 `LINE_CHANNEL_ACCESS_TOKEN`，
-   再把 `Code.gs` 的 `CONFIG.LINE_CHANNEL_ACCESS_TOKEN` 改成從 `PropertiesService` 讀取。
-   不要再把 token 提交到版本控制或分享給他人。
+1. **秘密全部存在 GAS「專案設定 ⚙️ → 指令碼屬性」（Script Properties）**：
+   - `LINE_TOKEN`：LINE Channel Access Token，由 `CONFIG.LINE_CHANNEL_ACCESS_TOKEN` getter 從 `PropertiesService` 讀取。
+   - `SPREADSHEET_ID`：試算表 ID，同模式由 `CONFIG.SPREADSHEET_ID` getter 讀取。
+   原始碼與 repo 內沒有任何秘密。token 需要輪換時，到 LINE Developers Console 重新發行，
+   再更新 Script Properties 即可，**不用改程式**。
 2. Web App 設為「所有人」代表任何拿到 `/exec` 網址的人都能查班表。
    目前只有姓名查詢、沒有登入驗證，請自行評估資料敏感度；
    若需要限制，可加上 Google 帳號限制或自行實作 token。
-3. 前端只用 `localStorage` 記住姓名，不會傳送 LINE 個資，也沒有使用 LIFF profile。
+3. `docs/config.js` 公開在 GitHub Pages，只放 `API_URL`，不要放 token 或試算表 ID。
+4. 前端只用 `localStorage` 記住姓名，不會傳送 LINE 個資，也沒有使用 LIFF profile。
 
 ## 後續擴充
 
-- 新頁面：在 `LiffApp.html` 的 `tabbar` 增加按鈕，`switchView()` 增加 view，`LiffApi.gs` 增加 action。
-- 新查詢：沿用 `state.search` 表單與 `runSearch()` 的 request/response 結構。
+- 新 API：在 `LiffApi.gs` 的 `apiCall` switch 加 case 與 handler，並在 `test/run-api.js`、`test/build-api-test.ps1` 補測試。
+- 新頁面：在 `docs/index.html` 的 `tabbar` 增加按鈕，`docs/app.js` 的 `switchView()` 增加 view。
 - 若之後要做 LINE 登入，再引入 LIFF SDK；目前的 `api()` 已把後端呼叫集中，替換身分來源不影響畫面。

@@ -110,9 +110,11 @@ Google Sheet：Staff / Schedule / Schedule_S / Station
 - `test/mocks.js`、`test/build-api-test.ps1`：已更新 ✅
 - 根目錄 `LiffApp.html`、`LiffStyles.html`、`LiffScripts.html`：已刪除（**GAS 遠端三個 HTML 仍要到編輯器手動刪**，`clasp push` 不會刪遠端）。
 - `test/build-preview.ps1`：已改寫為讀 `docs/` + fetch mock ✅
-- `test/run.js` 仍只 `eval(Code.gs)`：LINE 路徑夠用，但 Step 5 應改成同時 eval `LiffApi.gs`。
-- `LIFF_README.md`：未更新（測試數仍寫 18 項、`--virtual-time-budget=20000` 不足、部署章節全是舊架構）。
-- `AGENTS.md`：**不存在**（先前對話只規劃過，未寫入）。
+- `test/run.js`：Step 5 已改成 `eval(code + '\n' + api)`（同時載入 `Code.gs`＋`LiffApi.gs`）✅
+- `test/run-api.js`：Step 5 已補 9 項 doGet／doPost 分流檢查（15 → 24 項，全過）✅
+- `results.txt`：Step 5 重產，與 baseline 差異確認只有 27 行「（LIFF）」文案 ✅
+- `LIFF_README.md`：Step 6 已改寫（新架構圖、Pages 部署、CORS、測試數 24 項、virtual-time-budget=45000、疑難排解、安全段落）✅
+- `AGENTS.md`：Step 6 已建立（架構、測試指令、CORS、血淚教訓、領域規則、手動事項）✅
 - `appsscript.json`：未動（`executeAs: USER_DEPLOYING`、`access: ANYONE_ANONYMOUS`，維持即可）。
 - `.gitignore`：排除 `test/_preview*.html`、`test/_api-test.html`、`test/results.txt`；repo 已有 2 個 commit（`524dfb5` 重構、`cbfab6e` config API_URL）。
 
@@ -165,15 +167,20 @@ baseline 留檔：`test/results-baseline.txt`、`%TEMP%\opencode\run-api-baselin
 - **剩使用者手動**：LINE Developers Console → LIFF app 的 Endpoint URL 改指 `https://jhc63.github.io/crew-schedule/`。
 - **剩 GAS 編輯器手動**：刪除遠端三個舊 HTML（`LiffApp.html`、`LiffStyles.html`、`LiffScripts.html`）。
 
-### Step 5：Node 測試同步
+### Step 5：Node 測試同步（✅ 已完成，見第 4 節）
 - `test/run.js`：改為 `eval(code + '\n' + api)`（讀入 `LiffApi.gs`；`doPost` 分流的 API/解析錯誤路徑需要 `jsonResponse_`）。
-- `test/run-api.js`：可加 `doGet`/`doPost` 分流檢查（沿用 build-api-test 的 `callHttp`/`callGet` 寫法）。
-- 重跑 `node test\run.js` 重產 `results.txt`（預期與 baseline 只差那 27 行 LIFF 文案）。
+- `test/run-api.js`：沿用 build-api-test 的 `callHttp`/`callGet` 寫法補 9 項分流檢查（健康檢查／doGet 分流／doPost API・LINE 分流／events 優先於 action／無效 JSON 兩型／無法辨識格式）→ 24 項全過。
+- 重跑 `node test\run.js` 重產 `results.txt`（與 baseline 差異確認只有 27 行 LIFF 文案，0 行其他差異）。
 
-### Step 6：文件收尾
-- `LIFF_README.md`：新架構圖、GitHub Pages 部署、CORS 注意事項、測試數 24 項、`--virtual-time-budget=45000`、疑難排解（OPTIONS 405／302 後 CORS／HTML 登入頁＝權限錯誤）、安全段落（`LINE_TOKEN` 在 Script Properties，README 舊的「寫死 token」段落已過時）。
-- 建立 `AGENTS.md`：GAS JSON API + docs/ 靜態前端、測試指令、CORS 限制、`$$` 折疊教訓、virtual-time-budget、既有領域規則（輪值遞減、跨夜、順逆向、BASE_DATE、Schedule_S 表頭對應等）。
-- GAS 編輯器手動刪三個舊 HTML；`test/_preview.html`、`test/_api-test.html`、`test/results.txt` 是產生物不手改。
+### Step 6：文件收尾（✅ 已完成，見第 4 節）
+- `LIFF_README.md`：新架構圖、GitHub Pages 部署、CORS 注意事項、測試數 24 項、`--virtual-time-budget=45000`、疑難排解（OPTIONS 405／302 後 CORS／HTML 登入頁＝權限錯誤）、安全段落（`LINE_TOKEN`／`SPREADSHEET_ID` 在 Script Properties）。
+- 建立 `AGENTS.md`：架構、測試指令、CORS 限制、不可回退決策、`$$` 折疊教訓、virtual-time-budget、既有領域規則（輪值遞減、跨夜、順逆向、BASE_DATE、Schedule_S 表頭對應等）。
+- 剩使用者手動（見下）。
+
+### 使用者手動（自動化不了）
+- GAS 編輯器刪遠端三個舊 HTML（`clasp push` 不會刪遠端檔案）。
+- LINE Developers Console：LIFF Endpoint URL 改指 `https://jhc63.github.io/crew-schedule/`。
+- `test/_preview.html`、`test/_api-test.html`、`test/results.txt` 是產生物不手改。
 
 ---
 
