@@ -5,8 +5,12 @@ const path = require('path');
 require('./mocks.js');
 require('./data.js');
 
+// doPost 分流器在「API 請求」「JSON 解析錯誤」路徑會呼叫 handleApiRequest_／jsonResponse_
+//（定義在 LiffApi.gs），兩個檔案都要載入才測得到完整 doPost。
+// 注意：不能用 'use strict'，否則 eval() 的函式宣告不會外溢。
 const code = fs.readFileSync(path.join(__dirname, '..', 'Code.gs'), 'utf8');
-eval(code);
+const api = fs.readFileSync(path.join(__dirname, '..', 'LiffApi.gs'), 'utf8');
+eval(code + '\n' + api);
 
 const QUERIES = [
   // ── 1. 員工查詢 / 班表 / 車次（保留） ──

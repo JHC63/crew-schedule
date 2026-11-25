@@ -1,4 +1,4 @@
-// ===== LIFF API 快速驗證 =====
+// ===== LIFF API 快速驗證（含 doGet／doPost 分流） =====
 // 注意：不能用 'use strict'，否則 eval() 的函式宣告不會外溢，apiCall 會抓不到。
 const fs = require('fs');
 const path = require('path');
@@ -14,6 +14,21 @@ function call(action, payload) {
   const res = apiCall(action, payload || {});
   if (!res.ok) throw new Error(`[${action}] ${res.error}`);
   return res.data;
+}
+
+// 走 doPost 分流器（text/plain 簡單請求，與 docs/app.js 的 fetch 同形）
+function callHttp(action, payload) {
+  const res = doPost({
+    postData: { type: 'text/plain', contents: JSON.stringify({ action: action, payload: payload || {} }) }
+  });
+  return JSON.parse(res.getContent());
+}
+
+// 走 doGet（?action=&payload=）
+function callGet(action, payload) {
+  const params = { action: action };
+  if (payload) params.payload = JSON.stringify(payload);
+  return JSON.parse(doGet({ parameter: params }).getContent());
 }
 
 const checks = [];
@@ -144,6 +159,88 @@ check('validation: 基準日前', () => {
 check('validation: 未知操作', () => {
   const res = apiCall('nope', {});
   if (res.ok) throw new Error('應要失敗');
+  return res.error;
+});
+
+// ── doGet / doPost 分流（events 優先於 action） ──
+
+check('doGet 健康檢查', () => {
+  const res = JSON.parse(doGet({ parameter: {} }).getContent());
+  if (!res.ok || !res.data || res.data.service !== 'crew-schedule-api') {
+    throw new Error('健康檢查格式錯誤：' + JSON.stringify(res));
+  }
+  return `service=${res.data.service}, version=${res.data.version}`;
+});
+
+check('doGet action 分流', () => {
+  const res = callGet('bootstrap');
+  if (!res.ok || !res.data || !res.data.staff || !res.data.staff.length) {
+    throw new Error('doGet bootstrap 應回傳車長名單');
+  }
+  return `staff=${res.data.staff.length}, stations=${res.data.stations.length}`;
+});
+
+check('doGet 未知 action', () => {
+  const res = callGet('nope');
+  if (res.ok) throw new Error('應要失敗');
+  return res.error;
+});
+
+check('doPost API 分流', () => {
+  const res = callHttp('mySchedule', { name: '小林', days: 7 });
+  if (!res.ok || !res.data || !res.data.staffs || !res.data.staffs.length) {
+    throw new Error('doPost 應分流到 apiCall');
+  }
+  return `${res.data.staffs[0].days[0].date} ${res.data.staffs[0].days[0].kind}`;
+});
+
+check('doPost LINE webhook 分流', () => {
+  __replies.length = 0;
+  const out = doPost({
+    postData: {
+      type: 'application/json',
+      contents: JSON.stringify({
+        events: [{ replyToken: 'RT', type: 'message', message: { type: 'text', text: '11/18 小林' } }]
+      })
+    }
+  });
+  if (String(out.getContent()) !== 'OK') throw new Error('LINE 分流應回傳 OK');
+  if (!__replies.length) throw new Error('LINE 分流應回覆訊息');
+  return `reply=${__replies[0].split('\n')[3]}, messages=${__replies.length}`;
+});
+
+check('doPost 分流優先序：events 優先於 action', () => {
+  __replies.length = 0;
+  const out = doPost({
+    postData: {
+      type: 'application/json',
+      contents: JSON.stringify({
+        action: 'bootstrap',
+        events: [{ replyToken: 'RT', type: 'message', message: { type: 'text', text: '11/18 小林' } }]
+      })
+    }
+  });
+  if (String(out.getContent()) !== 'OK') throw new Error('events 與 action 並存時應優先走 LINE 分流');
+  if (!__replies.length) throw new Error('應回覆 LINE 訊息，而非回傳 bootstrap JSON');
+  return `LINE 分流，messages=${__replies.length}`;
+});
+
+check('doPost 無效 JSON（application/json → OK）', () => {
+  const out = doPost({ postData: { type: 'application/json', contents: '{bad' } });
+  if (String(out.getContent()) !== 'OK') throw new Error('LINE webhook 解析失敗應回 OK 防 LINE 重試');
+  return 'OK';
+});
+
+check('doPost 無效 JSON（其他 Content-Type → JSON 錯誤）', () => {
+  const res = JSON.parse(doPost({ postData: { type: 'text/plain', contents: '{bad' } }).getContent());
+  if (res.ok) throw new Error('應要失敗');
+  return res.error;
+});
+
+check('doPost 無法辨識的請求格式', () => {
+  const res = JSON.parse(doPost({ postData: { type: 'text/plain', contents: '{}' } }).getContent());
+  if (res.ok) throw new Error('應要失敗');
+  if (res.error !== '無法辨識的請求格式') throw new Error(`錯誤訊息不符：${res.error}`);
   return res.error;
 });
 
