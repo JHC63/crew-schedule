@@ -154,13 +154,15 @@
     if (!list.length) {
       fromSel.innerHTML = '<option value="">（無站點資料）</option>';
       toSel.innerHTML = fromSel.innerHTML;
-      return;
+      return;   // 無站點資料時維持 disabled
     }
     var html = list.map(function (s) {
       return '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>';
     }).join('');
     fromSel.innerHTML = html;
     toSel.innerHTML = html;
+    fromSel.disabled = false;   // HTML 初始 disabled（載入中），填完站後解除
+    toSel.disabled = false;
     // 預設：偏好 彰化→嘉義；否則第一站→最後一站
     var byName = {};
     list.forEach(function (s) { byName[normStn(s.name)] = s; });
@@ -609,12 +611,13 @@
         '<td>' + timeCell(item.tv.enter, item.tv.enterStop, item.tv.approx.enter) + '</td>' +
         '<td>' + timeCell(item.tv.exit, item.tv.exitStop, item.tv.approx.exit) + '</td>' +
         '<td class="c-delay">' + delayCell(t.no, item.delay) + '</td>' +
-        '<td class="c-crew">' + crewCell(item.riders) + '</td>' +
+        '<td class="c-crew">' + crewCell(item.riders, t.no) + '</td>' +
         '<td>' + statusBadge(item) + '</td>' +
         '</tr>');
     });
     body.innerHTML = rows.join('');
     bindDelayInputs();
+    bindCrewLinks();
     q('#btnCsv').disabled = false;
     q('#btnPrint').disabled = false;
   }
@@ -637,7 +640,7 @@
       '</span></span>';
   }
 
-  function crewCell(riders) {
+  function crewCell(riders, trainNo) {
     if (!riders.length) return '<span class="muted">（無）</span>';
     return riders.map(function (r) {
       var tag;
@@ -645,8 +648,56 @@
       else if (!r.affected) tag = '<span class="badge muted" title="在事故區間前已下車">未受影響</span>';
       else if (r.delayOn === 'boarding') tag = '<span class="badge warn" title="上車時列車已延誤">上車延誤</span>';
       else tag = '<span class="badge hot" title="在事故區間內乘車">受影響</span>';
-      return '<div class="crew-row">' + esc(r.seg.name) + '（' + esc(r.seg.group) + '）' + tag + '</div>';
+      // 受影響車長可點：跳到影響鏈該車長區塊（§12 操作需求）
+      var namePart;
+      if (r.affected && !r.unknownStation) {
+        namePart = '<button type="button" class="crew-link" data-train="' + esc(trainNo) +
+          '" data-name="' + esc(r.seg.name) + '" data-group="' + esc(r.seg.group) +
+          '" title="跳到下方影響鏈的此車長區塊">' + esc(r.seg.name) + '（' + esc(r.seg.group) + '）</button>';
+      } else {
+        namePart = esc(r.seg.name) + '（' + esc(r.seg.group) + '）';
+      }
+      return '<div class="crew-row">' + namePart + tag + '</div>';
     }).join('');
+  }
+
+  function bindCrewLinks() {
+    qa('.crew-link').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        jumpToChain(this.getAttribute('data-group'), this.getAttribute('data-name'), this.getAttribute('data-train'));
+      });
+    });
+  }
+
+  // 找影響鏈區塊：優先（車長＋車次）完全相符，否則該車長第一個區塊
+  function findChainBlock(group, name, trainNo) {
+    var first = null;
+    var blocks = qa('.chain-block');
+    for (var i = 0; i < blocks.length; i++) {
+      var b = blocks[i];
+      if (b.getAttribute('data-name') !== name || b.getAttribute('data-group') !== group) continue;
+      if (b.getAttribute('data-train') === trainNo) return b;
+      if (!first) first = b;
+    }
+    return first;
+  }
+
+  function jumpToChain(group, name, trainNo) {
+    var el = findChainBlock(group, name, trainNo);
+    if (!el && state.onlyShort) {
+      // 區塊被「只看緩衝時間不足」過濾掉 → 解除過濾再找
+      q('#onlyShort').checked = false;
+      state.onlyShort = false;
+      saveScenario();
+      renderChains();
+      el = findChainBlock(group, name, trainNo);
+    }
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.classList.remove('chain-flash');
+    void el.offsetWidth;   // 強制 reflow 重啟動畫
+    el.classList.add('chain-flash');
+    setTimeout(function () { el.classList.remove('chain-flash'); }, 2600);
   }
 
   function bindDelayInputs() {
@@ -755,7 +806,8 @@
           (n.status === 'ok' ? '' : '（' + (n.buffer < 0 ? '負值' : '< ' + state.buffer) + '）') + '</span> ' + badge +
           '</div>');
       }
-      html.push('<div class="chain-block">' +
+      html.push('<div class="chain-block" data-group="' + esc(c.group) + '" data-name="' + esc(c.name) +
+        '" data-train="' + esc(c.trainNo) + '">' +
         '<div class="chain-head">' + esc(c.name) + '（' + esc(c.group) + '）' +
         (c.label ? '<span class="chain-label">班別 ' + esc(c.label) + '</span>' : '') + '</div>' +
         rows.join('') + '</div>');

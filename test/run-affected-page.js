@@ -305,6 +305,22 @@ const selftestScript = `<script>
       setChecked('#onlyShort', false);
       q('#btnClearDelays').click();
     });
+    step('車長姓名點選跳影響鏈', function () {
+      var link = findRow('301').querySelector('.crew-link');
+      T('S35 受影響車長是可點按鈕（小林/301）', !!link &&
+        link.getAttribute('data-name') === '小林' && link.getAttribute('data-train') === '301' &&
+        link.getAttribute('data-group') === 'A');
+      link.click();
+      var blk = document.querySelector('.chain-block.chain-flash');
+      T('S36 點按後對應影響鏈區塊顯目顯示', !!blk &&
+        blk.getAttribute('data-name') === '小林' && blk.getAttribute('data-train') === '301');
+      setChecked('#onlyShort', true);   // 無延誤 → 全部被過濾
+      T('S36b onlyShort 開啟後區塊被過濾', document.querySelectorAll('.chain-block').length === 0);
+      findRow('301').querySelector('.crew-link').click();   // 點按 → 自動解除過濾
+      T('S37 過濾時點按車長會解除過濾並顯示', !!document.querySelector('.chain-block.chain-flash') &&
+        q('#onlyShort').checked === false);
+      setChecked('#onlyShort', false);
+    });
     step('localStorage 情境', function () {
       var raw = null;
       try { raw = localStorage.getItem('crew-schedule:affected:v1'); } catch (e) {}
@@ -313,6 +329,18 @@ const selftestScript = `<script>
       try { sc = JSON.parse(raw); } catch (e) {}
       T('S33 情境含 buffer/delays/from/to', !!(sc && sc.buffer != null && sc.delays && sc.from && sc.to));
       T('S34 情境日期＝今天', !!(sc && sc.date === q('#dateLine').textContent.match(/(\\d{4})\\/(\\d{2})\\/(\\d{2})/)[0].split('/').join('-')));
+    });
+    step('起訖站可選（2026/11/26 修：populateStations 忘記解除 disabled）', function () {
+      T('S38 起站／迄站下拉未鎖定', q('#fromStation').disabled === false && q('#toStation').disabled === false);
+      var sel = q('#fromStation');
+      var before = sel.value;
+      sel.value = sel.options[1].value;   // 換到第 2 站（臺中）
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      var sc2 = null;
+      try { sc2 = JSON.parse(localStorage.getItem('crew-schedule:affected:v1')); } catch (e) {}
+      T('S39 換站後情境同步（from＝新站碼）', !!sc2 && sc2.from === sel.value && sel.value !== before);
+      sel.value = before;
+      sel.dispatchEvent(new Event('change', { bubbles: true }));   // 還原
     });
 
     var i = 0;
