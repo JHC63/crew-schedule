@@ -57,7 +57,22 @@ const TRAINS = [
   // 501 跨夜：高雄 23:00 → 嘉義 23:57(+1 00:17) → 彰化(+1 01:20)——時段外，不會入選
   { no: '501', type: '區間', typeCode: '6', headsign: '往台北', extraTrain: false,
     serviceDay: { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1, holiday: 1 }, note: '在嘉義跨日。',
-    stops: [['4400', 1380, 1380], ['4080', 1437, 1457], ['3360', 1520, 1522]] }
+    stops: [['4400', 1380, 1380], ['4080', 1437, 1457], ['3360', 1520, 1522]] },
+  // 114 順向：高雄 07:30 → 嘉義 09:24/09:26 → 彰化 10:28/10:30 → 臺中 11:49
+  // 指定車次三段交接（A/11→A/23→A/9）；時段外，不影響起訖統計
+  { no: '114', type: '自強', typeCode: '11', headsign: '往臺中', extraTrain: false,
+    serviceDay: { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1, holiday: 1 }, note: '',
+    stops: [['4400', 450, 450], ['4080', 564, 566], ['3360', 628, 630], ['3300', 709, 709]] },
+  // 114 三位車長的下一班（時段外；用來驗證「完整影響鏈」）
+  { no: '121', type: '區間', typeCode: '6', headsign: '往彰化', extraTrain: false,
+    serviceDay: { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1, holiday: 1 }, note: '',
+    stops: [['4080', 575, 575], ['3360', 620, 620]] },
+  { no: '123', type: '區間', typeCode: '6', headsign: '往臺中', extraTrain: false,
+    serviceDay: { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1, holiday: 1 }, note: '',
+    stops: [['3360', 645, 645], ['3300', 690, 690]] },
+  { no: '125', type: '區間', typeCode: '6', headsign: '往臺北', extraTrain: false,
+    serviceDay: { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1, holiday: 1 }, note: '',
+    stops: [['3300', 735, 735], ['1000', 810, 810]] }
 ];
 // 車長值乘（name 虛構；title 為班表原始車次字串）
 const CREW = [
@@ -84,6 +99,19 @@ const CREW = [
   ] },
   { name: '阿忠', group: 'D', label: '073-1', segs: [
     { title: '101', station: '彰化', toStation: '嘉義', dep: 850, arr: 910 }
+  ] },
+  // 114 三段交接：小葉→小陳→小周，各自再追下一個班（指定車次完整影響鏈）
+  { name: '小葉', group: 'A', label: '114-1', segs: [
+    { title: '114', station: '高雄', toStation: '嘉義', dep: 450, arr: 564 },
+    { title: '121', station: '嘉義', toStation: '彰化', dep: 575, arr: 620 }
+  ] },
+  { name: '小陳', group: 'A', label: '114-2', segs: [
+    { title: '114', station: '嘉義', toStation: '彰化', dep: 566, arr: 628 },
+    { title: '123', station: '彰化', toStation: '臺中', dep: 645, arr: 690 }
+  ] },
+  { name: '小周', group: 'A', label: '114-3', segs: [
+    { title: '114', station: '彰化', toStation: '臺中', dep: 630, arr: 709 },
+    { title: '125', station: '臺中', toStation: '臺北', dep: 735, arr: 810 }
   ] }
 ];
 const STAFF = CREW.map(function (c) { return { name: c.name, group: c.group }; });
@@ -231,6 +259,29 @@ const selftestScript = `<script>
     el.checked = v;
     el.dispatchEvent(new Event('change', { bubbles: true }));
   }
+  function setMode(m) {
+    var r = q('input[name="queryMode"][value="' + m + '"]');
+    r.checked = true;
+    r.dispatchEvent(new Event('change', { bubbles: true }));
+  }
+  function comboPick(sel, text) {
+    var el = q(sel);
+    el.value = text;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    var list = q(sel === '#fromStation' ? '#fromList' : '#toList');
+    var opt = list.querySelector('[role="option"]');
+    if (opt) opt.click();
+    return !!opt;
+  }
+  function chainBlockText(name) {
+    var blocks = document.querySelectorAll('.chain-block');
+    for (var i = 0; i < blocks.length; i++) {
+      if (blocks[i].getAttribute('data-name') === name) {
+        return (blocks[i].textContent || '').replace(/\\s+/g, '');
+      }
+    }
+    return '';
+  }
 
   function run(done) {
     var steps = [];
@@ -239,26 +290,35 @@ const selftestScript = `<script>
     step('頁面就緒', function () {
       T('S01 __AFFECTED_READY__', window.__AFFECTED_READY__ === true);
       T('S02 零 JS 錯誤', window.__ERRORS__.length === 0, window.__ERRORS__.join('；'));
-      T('S03 時刻表 meta 已渲染', /車次 6 筆/.test(q('#ttMeta').textContent));
-      T('S04 站下拉有 6 站（主線範圍，非只班表站）', q('#fromStation').querySelectorAll('option').length === 6);
-      T('S05 預設 彰化→嘉義', q('#fromStation').selectedOptions[0].text === '彰化' && q('#toStation').selectedOptions[0].text === '嘉義');
+      T('S03 時刻表 meta 已渲染', /車次 10 筆/.test(q('#ttMeta').textContent));
+      T('S04 起站 combobox 未鎖定、點一下列 6 站', (function () {
+        var el = q('#fromStation');
+        el.click();
+        var n = document.querySelectorAll('#fromList [role="option"]').length;
+        el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+        return el.disabled === false && el.getAttribute('role') === 'combobox' && n === 6;
+      })());
+      T('S05 預設 彰化→嘉義（combobox＋hidden 站碼）',
+        q('#fromStation').value === '彰化' && q('#toStation').value === '嘉義' &&
+        q('#fromStationId').value === '3360' && q('#toStationId').value === '4080');
     });
     step('自動查詢結果', function () {
       var s = stats();
       T('S06 受影響車次＝5（101/102/201/301/303）', s.t === '5', '實際 ' + s.t);
       T('S07 受影響車長＝5（小林/大華/阿美/陳強/阿忠）', s.c === '5', '實際 ' + s.c);
       T('S08 緩衝不足＝0', s.s === '0', '實際 ' + s.s);
-      T('S09 301 列存在且南下（彰化→嘉義 14:00→15:00）', (function () {
+      T('S09 301 列存在且逆向（彰化→嘉義 14:00→15:00）', (function () {
         var row = findRow('301');
-        return row && row.textContent.indexOf('14:00') >= 0 && row.textContent.indexOf('15:00') >= 0;
+        return row && row.textContent.indexOf('逆向') >= 0 &&
+          row.textContent.indexOf('14:00') >= 0 && row.textContent.indexOf('15:00') >= 0;
       })());
       T('S10 201 進入為推估（~14:05）', (function () {
         var row = findRow('201');
         return row && /~14:05/.test(row.innerHTML);
       })());
-      T('S11 102 為北上（進入＝嘉義 14:20）', (function () {
+      T('S11 102 為順向（進入＝嘉義 14:20）', (function () {
         var row = findRow('102');
-        return row && row.textContent.indexOf('北上') >= 0 && row.textContent.indexOf('14:20') >= 0;
+        return row && row.textContent.indexOf('順向') >= 0 && row.textContent.indexOf('14:20') >= 0;
       })());
       T('S12 無時刻表警告含 115A', (q('#warnBox').textContent || '').indexOf('115A') >= 0);
       T('S13 無時刻表警告不含 501（有時刻表）', (q('#warnBox').textContent || '').indexOf('501') < 0);
@@ -330,17 +390,87 @@ const selftestScript = `<script>
       T('S33 情境含 buffer/delays/from/to', !!(sc && sc.buffer != null && sc.delays && sc.from && sc.to));
       T('S34 情境日期＝今天', !!(sc && sc.date === q('#dateLine').textContent.match(/(\\d{4})\\/(\\d{2})\\/(\\d{2})/)[0].split('/').join('-')));
     });
-    step('起訖站可選（2026/11/26 修：populateStations 忘記解除 disabled）', function () {
-      T('S38 起站／迄站下拉未鎖定', q('#fromStation').disabled === false && q('#toStation').disabled === false);
-      var sel = q('#fromStation');
-      var before = sel.value;
-      sel.value = sel.options[1].value;   // 換到第 2 站（臺中）
-      sel.dispatchEvent(new Event('change', { bubbles: true }));
+    step('起訖站 combobox（2026/11/26：自刻、台北→臺北）', function () {
+      T('S38 起站／迄站 combobox 未鎖定', q('#fromStation').disabled === false && q('#toStation').disabled === false);
+      T('S38b 輸入「台北」可選到「臺北」', comboPick('#fromStation', '台北') && q('#fromStationId').value === '1000',
+        'hidden=' + q('#fromStationId').value);
       var sc2 = null;
       try { sc2 = JSON.parse(localStorage.getItem('crew-schedule:affected:v1')); } catch (e) {}
-      T('S39 換站後情境同步（from＝新站碼）', !!sc2 && sc2.from === sel.value && sel.value !== before);
-      sel.value = before;
-      sel.dispatchEvent(new Event('change', { bubbles: true }));   // 還原
+      T('S39 換站後情境同步（from＝1000）', !!sc2 && sc2.from === '1000', sc2 && sc2.from);
+      comboPick('#fromStation', '彰化');   // 還原
+    });
+    step('指定車次：切換模式', function () {
+      setMode('train');
+      T('S40 切到指定車次：起訖欄隱藏、車次欄顯示',
+        q('#fromStation').closest('.field').hidden === true &&
+        q('#trainNo').closest('.field').hidden === false);
+      setVal('#trainNo', '114');
+      q('#btnQuery').click();
+    });
+    step('指定車次 114：值乘腿', function () {
+      var s = stats();
+      T('S41 值乘腿＝3／車長＝3／不足＝0', s.t === '3' && s.c === '3' && s.s === '0',
+        '實際 ' + s.t + '/' + s.c + '/' + s.s);
+      T('S42 統計標籤改「值乘腿」', q('#statTrainsLabel').textContent === '值乘腿');
+      T('S43 摘要 114／順向／高雄→臺中', (function () {
+        var t = q('#trainSummary').textContent;
+        return t.indexOf('114') >= 0 && t.indexOf('順向') >= 0 && t.indexOf('高雄→臺中') >= 0;
+      })(), q('#trainSummary').textContent);
+      T('S44 值乘腿 3 列＋交接 2 列',
+        document.querySelectorAll('#trainBody tr.leg-row').length === 3 &&
+        document.querySelectorAll('#trainBody tr.handover-row').length === 2,
+        '實際 ' + document.querySelectorAll('#trainBody tr.leg-row').length + '／' +
+        document.querySelectorAll('#trainBody tr.handover-row').length);
+      T('S45 影響鏈 3 塊＋2 個交接提示',
+        document.querySelectorAll('.chain-block').length === 3 &&
+        document.querySelectorAll('.chain-handover').length === 2,
+        '實際 ' + document.querySelectorAll('.chain-block').length + '／' +
+        document.querySelectorAll('.chain-handover').length);
+      T('S46 交接文字＝嘉義 小葉→小陳', (function () {
+        var t = q('#chainBox').textContent.replace(/\\s+/g, '');
+        return t.indexOf('嘉義09:24／09:26交班：A/小葉→A/小陳（接班）') >= 0;
+      })(), q('#chainBox').textContent);
+      T('S47 三腿各自追到下一班', chainBlockText('小葉').indexOf('121') >= 0 &&
+        chainBlockText('小陳').indexOf('123') >= 0 && chainBlockText('小周').indexOf('125') >= 0);
+    });
+    step('指定車次：延誤快速鍵＋影響鏈', function () {
+      q('.tqbtn[data-train-add="15"]').click();
+      T('S48 +15 後本車延誤＝15', q('#trainDelay').value === '15');
+      T('S49 值乘腿延誤同步 15', findRow('114').querySelector('.delay-input').value === '15');
+      T('S50 不足＝2（小葉趕不上、小陳不足、小周正常）', stats().s === '2', '實際 ' + stats().s);
+      T('S51 小葉鏈趕不上', chainBlockText('小葉').indexOf('趕不上') >= 0, chainBlockText('小葉'));
+      T('S52 小陳鏈不足', chainBlockText('小陳').indexOf('不足') >= 0, chainBlockText('小陳'));
+      T('S53 小周鏈正常', chainBlockText('小周').indexOf('正常') >= 0, chainBlockText('小周'));
+    });
+    step('指定車次：115 自動對到 115A', function () {
+      setVal('#trainNo', '115');
+      q('#btnQuery').click();
+    });
+    step('115A 結果（無時刻表）', function () {
+      var w = q('#warnBox').textContent;
+      T('S54 提示自動對到 115A', w.indexOf('已自動對到車次 115A') >= 0, w);
+      T('S55 無時刻表改用班表時間', w.indexOf('已改用班表時間計算') >= 0, w);
+      T('S56 值乘腿＝1／車長＝1', stats().t === '1' && stats().c === '1', '實際 ' + stats().t + '/' + stats().c);
+      T('S57 單腿車長＝當日最後一班', chainText().indexOf('當日最後一班') >= 0);
+    });
+    step('指定車次：查無車次', function () {
+      setVal('#trainNo', '999');
+      q('#btnQuery').click();
+    });
+    step('999 錯誤提示', function () {
+      T('S58 查無車次 999 提示', q('#warnBox').textContent.indexOf('今日班表查無車次 999') >= 0,
+        q('#warnBox').textContent);
+    });
+    step('切回起訖區間', function () {
+      setMode('section');
+      T('S59 切回後起訖欄恢復', q('#fromStation').closest('.field').hidden === false &&
+        q('#trainNo').closest('.field').hidden === true);
+      q('#btnQuery').click();
+    });
+    step('切回後結果', function () {
+      T('S60 起訖查詢仍正常（5 車次／5 車長）', stats().t === '5' && stats().c === '5',
+        '實際 ' + stats().t + '/' + stats().c);
+      T('S61 切回後標籤恢復「受影響車次」', q('#statTrainsLabel').textContent === '受影響車次');
     });
 
     var i = 0;

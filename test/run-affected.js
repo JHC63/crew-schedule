@@ -131,11 +131,17 @@ ok('4e 時段邊界 9:50/10:20 切進推估範圍 → 可能受影響', possible
 // §14 案例 5／6／9：車長分類（L2）
 // ============================================================
 // 南下 101：彰化(pos4) 進入、嘉義(pos8) 離開
-// 5. 車長在事故前下車：台北→彰化（下車站＝進入端）→ 未受影響
+// 5. 車長在事故前下車：台北→臺中（下車站在進入端之前）→ 未受影響
 const r5 = CORE.classifyRider(
-  { title: '101', station: '台北', toStation: '彰化' },
+  { title: '101', station: '台北', toStation: '臺中' },
   tvS, IDX, idOf('彰化'), idOf('嘉義'));
 eq('5a 事故前下車 → 未受影響', r5.affected, false);
+// 5b. 下車站＝進入端（台北→彰化）→ 受影響（2026/11/26 起，見案例 18）
+const r5b = CORE.classifyRider(
+  { title: '101', station: '台北', toStation: '彰化' },
+  tvS, IDX, idOf('彰化'), idOf('嘉義'));
+eq('5b 下車站＝進入端 → 受影響', r5b.affected, true);
+eq('5c 下車站＝進入端 → 延誤落在 alighting', r5b.delayOn, 'alighting');
 // 6. 車長在事故後上車：彰化→高雄（上車站＝進入端？不行——上車站序 ≥ 離開端才算 boarding）
 //    嘉義→高雄：上車站＝離開端（嘉義）→ boarding
 const r6 = CORE.classifyRider(
@@ -150,15 +156,15 @@ const r6b = CORE.classifyRider(
 eq('6c 區間內乘車 → 延誤落在 alighting', r6b.delayOn, 'alighting');
 // 9. 同車次多車長：各自用自己的區間
 const r9a = CORE.classifyRider(
-  { title: '101', station: '台北', toStation: '彰化' },
+  { title: '101', station: '台北', toStation: '臺中' },
   tvS, IDX, idOf('彰化'), idOf('嘉義'));
 const r9b = CORE.classifyRider(
   { title: '101', station: '員林', toStation: '嘉義' },
   tvS, IDX, idOf('彰化'), idOf('嘉義'));
 ok('9a 車長 A 未受影響、車長 B 受影響（同車次各自獨立；B 在員林上車＝區間內 → alighting）',
   r9a.affected === false && r9b.affected === true && r9b.delayOn === 'alighting');
-// 邊界：下車站序剛好＝進入端（台北→彰化，彰化＝進入端）→ 未受影響（≤，§5）
-ok('9b 下車站＝進入端 → 未受影響（嚴格 ≤）', r9a.affected === false);
+// 邊界：下車站序剛好＝進入端（台北→彰化，彰化＝進入端）→ 受影響（2026/11/26 起，案例 18）
+ok('9b 下車站＝進入端 → 受影響（原嚴格 ≤，2026/11/26 使用者回饋改）', r5b.affected === true);
 // 站名對不到 → 需人工確認
 const rBad = CORE.classifyRider(
   { title: '101', station: '鳳鳴', toStation: '嘉義' },
@@ -170,11 +176,12 @@ const rTai = CORE.classifyRider(
   tvS, IDX, idOf('彰化'), idOf('嘉義'));
 ok('9d 台/臺 正規化正常分類', rTai.affected === true && rTai.unknownStation !== true);
 // 北上車的對稱檢查：102 嘉義→彰化（南下方向區間查詢 彰化→嘉義）
-// 北上 102：嘉義(pos8) 先遇到＝進入端 560；車長 高雄→嘉義（下車站＝進入端）→ 未受影響
+// 北上 102：嘉義(pos8) 先遇到＝進入端 560；車長 高雄→嘉義（下車站＝進入端）→ 受影響（2026/11/26 起）
 const rN = CORE.classifyRider(
   { title: '102', station: '高雄', toStation: '嘉義' },
   tvN, IDX, idOf('彰化'), idOf('嘉義'));
-eq('9e 北上車：事故區間前下車 → 未受影響', rN.affected, false);
+eq('9e 北上車：下車站＝進入端 → 受影響（對稱）', rN.affected, true);
+eq('9e2 北上車：下車站＝進入端 → alighting', rN.delayOn, 'alighting');
 const rN2 = CORE.classifyRider(
   { title: '102', station: '彰化', toStation: '台北' },
   tvN, IDX, idOf('彰化'), idOf('嘉義'));
@@ -292,6 +299,107 @@ const tvSame = CORE.traverseSection(T_SOUTH, idOf('彰化'), idOf('彰化'), IDX
 eq('A3 起迄相同站 → null（表單已擋，函式防禦）', tvSame, null);
 eq('A4 站碼查無 pos → null',
   CORE.traverseSection(T_SOUTH, '9999', idOf('嘉義'), IDX.posById, nameOf), null);
+
+// ============================================================
+// 15. 指定車次：輸入正規化／比對（2026/11/26 新增）
+// ============================================================
+eq('15a 全形 １１５Ａ → 115A', CORE.normalizeTrainInput('１１５Ａ'), '115A');
+eq('15b 115 a → 115A', CORE.normalizeTrainInput('115 a'), '115A');
+eq('15c 3292B便 → 3292B', CORE.normalizeTrainInput('3292B便'), '3292B');
+eq('15d 全形括號 ３１４８（３１４６）→ 3148', CORE.normalizeTrainInput('３１４８（３１４６）'), '3148');
+const r15a = CORE.resolveTrainNo('115', ['115A']);
+eq('15e 115 只有 115A → 自動對到', r15a.key, '115A');
+eq('15f 自動對到規則 suffix', r15a.rule, 'suffix');
+const r15b = CORE.resolveTrainNo('115', ['115', '115A']);
+eq('15g 115 完全符合優先', r15b.key, '115');
+eq('15h 完全符合規則 exact', r15b.rule, 'exact');
+const r15c = CORE.resolveTrainNo('115', ['115A', '115B']);
+eq('15i 115A/115B 並存 → ambiguous', r15c.rule, 'ambiguous');
+eq('15j ambiguous 候選 2 筆', r15c.candidates.length, 2);
+const r15d = CORE.resolveTrainNo('270', ['2705']);
+eq('15k 270 不誤中 2705', r15d.rule, 'notfound');
+const r15e = CORE.resolveTrainNo('115A', ['115']);
+eq('15l 115A 不退回 115', r15e.rule, 'notfound');
+const r15f = CORE.resolveTrainNo('３１４８（３１４６）', ['3148']);
+eq('15m 全形括號 → 3148', r15f.key, '3148');
+eq('15n 空輸入 → empty', CORE.resolveTrainNo('  ', ['115']).rule, 'empty');
+
+// ============================================================
+// 16. 起訖站搜尋（2026/11/26 新增）
+// ============================================================
+const ST16 = [
+  { id: '1000', name: '臺北', pos: 1 },
+  { id: '0900', name: '基隆', pos: 0 },
+  { id: '3300', name: '臺中', pos: 3 },
+  { id: '3360', name: '彰化', pos: 4 }
+];
+eq('16a 空查詢 → 全部', CORE.filterStations(ST16, '').length, 4);
+eq('16b 空查詢依 pos 排序（基隆第一）', CORE.filterStations(ST16, '')[0].id, '0900');
+eq('16c 台北 → 臺北', CORE.filterStations(ST16, '台北')[0].id, '1000');
+eq('16d 臺北 → 臺北', CORE.filterStations(ST16, '臺北')[0].id, '1000');
+eq('16e 台北站 → 臺北', CORE.filterStations(ST16, '台北站')[0].id, '1000');
+eq('16f 站碼 1000 → 臺北', CORE.filterStations(ST16, '1000')[0].id, '1000');
+eq('16g 站碼前綴 33 → 臺中/彰化', CORE.filterStations(ST16, '33').length, 2);
+eq('16h 查無 → 0', CORE.filterStations(ST16, '火星').length, 0);
+eq('16i resolveStation 台北 → 臺北', CORE.resolveStation(ST16, '台北').id, '1000');
+eq('16j resolveStation 1000 → 臺北', CORE.resolveStation(ST16, '1000').id, '1000');
+eq('16k resolveStation 台北市 → null', CORE.resolveStation(ST16, '台北市'), null);
+
+// ============================================================
+// 17. 指定車次：值乘腿排序／交接（2026/11/26 新增）
+// ============================================================
+const M17 = 60000;
+const LEGS17 = [
+  { title: '114', station: '彰化', toStation: '新竹', startMs: 630 * M17, endMs: 709 * M17, group: 'A', name: '甲' },
+  { title: '114', station: '潮州', toStation: '嘉義', startMs: 450 * M17, endMs: 564 * M17, group: 'A', name: '乙' },
+  { title: '114', station: '嘉義', toStation: '彰化', startMs: 566 * M17, endMs: 628 * M17, group: 'A', name: '丙' }
+];
+const ORD17 = CORE.orderLegs(LEGS17);
+eq('17a 依 startMs 排序（潮州→嘉義第一）', ORD17[0].seg.station, '潮州');
+eq('17b 第二腿 嘉義→彰化', ORD17[1].seg.station, '嘉義');
+eq('17c 第三腿 彰化→新竹', ORD17[2].seg.station, '彰化');
+eq('17d 嘉義交接站相同', ORD17[0].handover.sameStation, true);
+eq('17e 嘉義交接不同車長', ORD17[0].handover.sameCrew, false);
+eq('17f 嘉義交接間隔 2 分', ORD17[0].handover.gapMin, 2);
+eq('17g 最後一腿無 handover', ORD17[2].handover, null);
+const ORD17B = CORE.orderLegs([
+  { title: 'X', station: 'A', toStation: 'B', startMs: 0, endMs: 10 * M17, group: 'A', name: '甲' },
+  { title: 'X', station: 'C', toStation: 'D', startMs: 20 * M17, endMs: 30 * M17, group: 'A', name: '乙' }
+]);
+eq('17h 不同站 → sameStation false', ORD17B[0].handover.sameStation, false);
+eq('17i 間隔 10 分', ORD17B[0].handover.gapMin, 10);
+const ORD17C = CORE.orderLegs([
+  { title: '501', station: '嘉義', toStation: '彰化', startMs: 0, endMs: 10 * M17, group: 'A', name: '甲' },
+  { title: '501', station: '彰化', toStation: '台北', startMs: 10 * M17, endMs: 20 * M17, group: 'A', name: '甲' }
+]);
+eq('17j 同一車長續乘 → sameCrew true', ORD17C[0].handover.sameCrew, true);
+
+// ============================================================
+// 18. 2026/11/26 使用者回饋：3207（后里→彰化 11:09–12:20）延誤 90 分
+//     A 車長在進入端（彰化）下車 → 抵達也延後 90（13:50）→ 接不上 2173（彰化 13:46 開）
+//     原規則「下車站序 ≤ 進入端 → 未受影響」會漏掉這條鏈，改為 < 進入端才算未受影響。
+// ============================================================
+const r18 = CORE.classifyRider(
+  { title: '3207', station: '臺中', toStation: '彰化' },
+  tvS, IDX, idOf('彰化'), idOf('嘉義'));
+eq('18a 3207 在進入端（彰化）下車 → 受影響', r18.affected, true);
+eq('18b 延誤落在 alighting', r18.delayOn, 'alighting');
+const ch18 = CORE.buildChain({
+  seg: { title: '3207', station: '后里', toStation: '彰化', dep: 669, arr: 740 },   // 11:09–12:20
+  trainNo: '3207', delay: 90, delayOn: 'alighting',
+  next: { title: '2173', station: '彰化', toStation: '嘉義', dep: 826, arr: 910 },  // 13:46–15:10
+  delays: {}, threshold: 10
+});
+eq('18c 3207＋90 → 彰化 13:50 到（arrNew＝830）', ch18.arrNew, 830);
+eq('18d 2173 13:46 開 → 緩衝 −4 分', ch18.next.buffer, -4);
+eq('18e 狀態＝趕不上（missed）', ch18.next.status, 'missed');
+eq('18f 未延誤時緩衝 86 分（正常）',
+  CORE.buildChain({
+    seg: { title: '3207', station: '后里', toStation: '彰化', dep: 669, arr: 740 },
+    trainNo: '3207', delay: 0, delayOn: 'alighting',
+    next: { title: '2173', station: '彰化', toStation: '嘉義', dep: 826, arr: 910 },
+    delays: {}, threshold: 10
+  }).next.status, 'ok');
 
 // ============================================================
 // 結果

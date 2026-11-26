@@ -46,6 +46,11 @@
     tt: null,                 // timetable.json：{ meta, stations, trains }
     ttError: '',
     index: null,              // { posById, nameToId }（core 站索引）
+    mode: 'section',          // 'section' 起訖區間｜'train' 指定車次
+    trainNo: '',              // 指定車次：解析後的車次 key
+    trainInput: '',           // 指定車次：使用者輸入原文
+    trainDelayInput: 0,       // 指定車次：本車延誤輸入
+    trainMatchNote: '',       // 指定車次：自動對到 A/B 腿的提示
     from: '', to: '',
     timeFrom: DEFAULTS.timeFrom, timeTo: DEFAULTS.timeTo,
     direction: 'both',
@@ -57,6 +62,7 @@
     crewLoading: false,
     results: null
   };
+  var comboFrom = null, comboTo = null;
 
   // ============================================================
   // 小工具（轉接 core）
@@ -152,32 +158,242 @@
     }).slice().sort(function (a, b) { return a.pos - b.pos; });
   }
 
-  function populateStations() {
-    var fromSel = q('#fromStation');
-    var toSel = q('#toStation');
-    var list = corridorStations();
-    if (!list.length) {
-      fromSel.innerHTML = '<option value="">（無站點資料）</option>';
-      toSel.innerHTML = fromSel.innerHTML;
-      return;   // 無站點資料時維持 disabled
+  // 起訖站自刻 combobox：點一下列全部（131 站）、打字過濾（台北→臺北）、站碼可搜、
+  // 鍵盤／ARIA／IME 完整。站名正規化與比對在 core（Node 可測）。
+  function highlightStation(name, query) {
+    var n = CORE.normStn(name);
+    var qtext = CORE.normStn(query);
+    if (!qtext) return esc(name);
+    var i = n.indexOf(qtext);
+    if (i < 0) return esc(name);
+    return esc(name.slice(0, i)) + '<mark>' + esc(name.slice(i, i + qtext.length)) + '</mark>' +
+      esc(name.slice(i + qtext.length));
+  }
+
+  function createCombo(opts) {
+    var input = q(opts.input);
+    var hidden = q(opts.hidden);
+    var listEl = q(opts.list);
+    var stations = [];
+    var matches = [];
+    var active = -1;
+    var isOpen = false;
+    var composing = false;
+    var setting = false;
+    var lastValid = null;
+
+    function render() {
+      if (!isOpen) return;
+      var html = matches.map(function (s, i) {
+        var cls = 'combo-opt' + (i === active ? ' active' : '') + (hidden.value === s.id ? ' selected' : '');
+        return '<li id="' + esc(listEl.id) + '-opt-' + i + '" class="' + cls + '" role="option"' +
+          ' aria-selected="' + (hidden.value === s.id ? 'true' : 'false') + '"' +
+          ' data-id="' + esc(s.id) + '" data-index="' + i + '">' +
+          '<span class="combo-name">' + highlightStation(s.name, input.value) + '</span>' +
+          '<span class="combo-code">' + esc(s.id) + '</span></li>';
+      }).join('');
+      if (!matches.length) html = '<li class="combo-empty" role="presentation">查無站名</li>';
+      listEl.innerHTML = html;
+      listEl.hidden = false;
+      input.setAttribute('aria-expanded', 'true');
+      if (active >= 0 && matches[active]) {
+        input.setAttribute('aria-activedescendant', listEl.id + '-opt-' + active);
+        var el = q('#' + listEl.id + '-opt-' + active);
+        if (el && el.scrollIntoView) el.scrollIntoView({ block: 'nearest' });
+      } else {
+        input.removeAttribute('aria-activedescendant');
+      }
     }
-    var html = list.map(function (s) {
-      return '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>';
-    }).join('');
-    fromSel.innerHTML = html;
-    toSel.innerHTML = html;
-    fromSel.disabled = false;   // HTML 初始 disabled（載入中），填完站後解除
-    toSel.disabled = false;
-    // 預設：偏好 彰化→嘉義；否則第一站→最後一站
+
+    // all=true：點一下／聚焦時列出全部（需求）；打字時才依輸入過濾
+    function openList(all) {
+      if (!stations.length) return;
+      matches = CORE.filterStations(stations, all ? '' : input.value);
+      active = matches.length ? 0 : -1;
+      if (hidden.value) {
+        for (var i = 0; i < matches.length; i++) {
+          if (matches[i].id === hidden.value) { active = i; break; }
+        }
+      }
+      isOpen = true;
+      render();
+    }
+
+    function closeList() {
+      isOpen = false;
+      listEl.hidden = true;
+      listEl.innerHTML = '';
+      input.setAttribute('aria-expanded', 'false');
+      input.removeAttribute('aria-activedescendant');
+      active = -1;
+    }
+
+    function setValue(id) {
+      var st = null;
+      for (var i = 0; i < stations.length; i++) {
+        if (stations[i].id === id) { st = stations[i]; break; }
+      }
+      if (!st) return false;
+      setting = true;
+      hidden.value = st.id;
+      input.value = st.name;
+      lastValid = { id: st.id, name: st.name };
+      setting = false;
+      closeList();
+      return true;
+    }
+
+    function resolveTyped() {
+      if (hidden.value) return hidden.value;
+      var st = CORE.resolveStation(stations, input.value);
+      if (st) {
+        setValue(st.id);
+        if (opts.onSelect) opts.onSelect(st);
+        return st.id;
+      }
+      return '';
+    }
+
+    function selectIndex(i) {
+      if (i < 0 || i >= matches.length) return;
+      var st = matches[i];
+      setValue(st.id);
+      if (opts.onSelect) opts.onSelect(st);
+    }
+
+    function onInput() {
+      if (setting) return;
+      hidden.value = '';
+      openList(false);
+    }
+
+    function onFocus() {
+      if (!isOpen) openList(true);
+    }
+
+    function onKeyDown(e) {
+      if (composing) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        if (!isOpen) openList(!!hidden.value);
+        else if (matches.length) { active = (active + 1) % matches.length; render(); }
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!isOpen) openList(!!hidden.value);
+        else if (matches.length) { active = (active - 1 + matches.length) % matches.length; render(); }
+      } else if (e.key === 'Enter') {
+        if (isOpen && active >= 0) {
+          e.preventDefault();
+          selectIndex(active);
+        } else {
+          var id = resolveTyped();
+          if (id) e.preventDefault();
+        }
+      } else if (e.key === 'Escape') {
+        if (isOpen) {
+          e.preventDefault();
+          closeList();
+          if (lastValid) {
+            setting = true;
+            input.value = lastValid.name;
+            hidden.value = lastValid.id;
+            setting = false;
+          }
+        }
+      } else if (e.key === 'Tab') {
+        closeList();
+        resolveTyped();
+      } else if (e.key === 'Home' && isOpen) {
+        e.preventDefault(); active = 0; render();
+      } else if (e.key === 'End' && isOpen) {
+        e.preventDefault(); active = matches.length - 1; render();
+      }
+    }
+
+    function onBlur() {
+      setTimeout(function () {
+        if (document.activeElement === input) return;
+        closeList();
+        if (hidden.value) return;
+        var st = CORE.resolveStation(stations, input.value);
+        if (st) {
+          setValue(st.id);
+          if (opts.onSelect) opts.onSelect(st);
+        } else if (lastValid) {
+          setting = true;
+          input.value = lastValid.name;
+          hidden.value = lastValid.id;
+          setting = false;
+        }
+      }, 0);
+    }
+
+    input.addEventListener('input', onInput);
+    input.addEventListener('focus', onFocus);
+    input.addEventListener('click', function () { if (!isOpen) openList(true); });
+    input.addEventListener('keydown', onKeyDown);
+    input.addEventListener('blur', onBlur);
+    input.addEventListener('compositionstart', function () { composing = true; });
+    input.addEventListener('compositionend', function () { composing = false; onInput(); });
+    listEl.addEventListener('mousedown', function (e) { e.preventDefault(); });
+    listEl.addEventListener('click', function (e) {
+      var el = e.target;
+      while (el && el !== listEl && !el.getAttribute('data-index')) el = el.parentNode;
+      if (!el || el === listEl) return;
+      selectIndex(Number(el.getAttribute('data-index')));
+    });
+    document.addEventListener('mousedown', function (e) {
+      if (isOpen && !listEl.contains(e.target) && e.target !== input) closeList();
+    });
+
+    return {
+      setStations: function (list) { stations = (list || []).slice(); },
+      setValue: setValue,
+      getValue: function () { return hidden.value; },
+      getText: function () { return input.value; },
+      resolveTyped: resolveTyped,
+      close: closeList
+    };
+  }
+
+  // 預設起訖：偏好 彰化→嘉義；否則第一站→最後一站
+  function defaultStationIds() {
+    var list = corridorStations();
+    if (!list.length) return null;
     var byName = {};
     list.forEach(function (s) { byName[normStn(s.name)] = s; });
     var dFrom = byName[normStn(DEFAULTS.from)] || list[0];
     var dTo = byName[normStn(DEFAULTS.to)] || list[list.length - 1];
     if (dFrom.id === dTo.id && list.length > 1) dTo = list[list.length - 1];
-    fromSel.value = dFrom.id;
-    toSel.value = dTo.id;
-    state.from = dFrom.id;
-    state.to = dTo.id;
+    return { from: dFrom.id, to: dTo.id };
+  }
+
+  function initStationCombos() {
+    var list = corridorStations();
+    var fromInput = q('#fromStation');
+    var toInput = q('#toStation');
+    if (!list.length) {
+      fromInput.placeholder = '（無站點資料）';
+      toInput.placeholder = '（無站點資料）';
+      return;
+    }
+    comboFrom = createCombo({
+      input: '#fromStation', hidden: '#fromStationId', list: '#fromList',
+      onSelect: function (st) { state.from = st.id; saveScenario(); }
+    });
+    comboTo = createCombo({
+      input: '#toStation', hidden: '#toStationId', list: '#toList',
+      onSelect: function (st) { state.to = st.id; saveScenario(); }
+    });
+    comboFrom.setStations(list);
+    comboTo.setStations(list);
+    fromInput.disabled = false;
+    toInput.disabled = false;
+    var d = defaultStationIds();
+    comboFrom.setValue(d.from);
+    comboTo.setValue(d.to);
+    state.from = d.from;
+    state.to = d.to;
   }
 
   // ============================================================
@@ -195,9 +411,15 @@
       if (sc.to) state.to = sc.to;
       if (sc.timeFrom) state.timeFrom = sc.timeFrom;
       if (sc.timeTo) state.timeTo = sc.timeTo;
-      if (sc.direction) state.direction = sc.direction;
+      if (sc.direction === 'south') state.direction = 'reverse';
+      else if (sc.direction === 'north') state.direction = 'forward';
+      else if (sc.direction) state.direction = sc.direction;
       if (sc.includePass != null) state.includePass = sc.includePass;
       if (sc.onlyShort != null) state.onlyShort = sc.onlyShort;
+      if (sc.mode === 'section' || sc.mode === 'train') state.mode = sc.mode;
+      if (sc.trainInput) state.trainInput = sc.trainInput;
+      if (sc.trainNo) state.trainNo = sc.trainNo;
+      if (sc.trainDelayInput != null) state.trainDelayInput = sc.trainDelayInput;
     } catch (e) { /* 情境壞了就當沒有 */ }
   }
   function saveScenario() {
@@ -210,7 +432,11 @@
         timeFrom: state.timeFrom, timeTo: state.timeTo,
         direction: state.direction,
         includePass: state.includePass,
-        onlyShort: state.onlyShort
+        onlyShort: state.onlyShort,
+        mode: state.mode,
+        trainNo: state.trainNo,
+        trainInput: state.trainInput,
+        trainDelayInput: state.trainDelayInput
       }));
     } catch (e) { /* 隱私模式等：存不進就算了 */ }
   }
@@ -324,26 +550,63 @@
   // 查詢主流程（bootstrap／staffSchedule 載入後全在本地計算）
   // ============================================================
   function readForm() {
-    state.from = q('#fromStation').value;
-    state.to = q('#toStation').value;
+    state.mode = q('input[name="queryMode"]:checked').value;
+    var buf = parseInt(q('#bufferMin').value, 10);
+    state.buffer = (isNaN(buf) || buf < 0) ? 0 : (buf > 120 ? 120 : buf);
+    state.onlyShort = q('#onlyShort').checked;
+    if (state.mode === 'train') {
+      state.trainInput = q('#trainNo').value;
+      var td = parseInt(q('#trainDelay').value, 10);
+      state.trainDelayInput = (isNaN(td) || td < 0) ? 0 : (td > 600 ? 600 : td);
+      return;
+    }
+    state.from = comboFrom ? comboFrom.resolveTyped() : q('#fromStationId').value;
+    state.to = comboTo ? comboTo.resolveTyped() : q('#toStationId').value;
     state.timeFrom = q('#timeFrom').value || DEFAULTS.timeFrom;
     state.timeTo = q('#timeTo').value || DEFAULTS.timeTo;
     state.direction = q('#direction').value;
-    var buf = parseInt(q('#bufferMin').value, 10);
-    state.buffer = (isNaN(buf) || buf < 0) ? 0 : (buf > 120 ? 120 : buf);
     state.includePass = q('#includePass').checked;
-    state.onlyShort = q('#onlyShort').checked;
   }
 
   function validateForm() {
     var problems = [];
     if (!state.tt) problems.push('時刻表未載入');
+    if (state.mode === 'train') {
+      if (!state.trainInput || !state.trainInput.trim()) problems.push('請輸入車次');
+      return problems;
+    }
     if (!state.from || !state.to) problems.push('請選擇起站與迄站');
     if (state.from && state.from === state.to) problems.push('起站與迄站不能相同');
     var t1 = parseHM(state.timeFrom);
     var t2 = parseHM(state.timeTo);
     if (t1 == null || t2 == null || t1 >= t2) problems.push('時段起必須早於時段迄');
     return problems;
+  }
+
+  // 指定車次：把輸入解析成今日班表的車次 key；查無／ambiguous 回 error
+  function resolveTrainForQuery() {
+    var keys = Object.keys(state.crew.byTrain);
+    var r = CORE.resolveTrainNo(state.trainInput, keys);
+    if (r.rule === 'empty') return { error: '請輸入車次。' };
+    if (r.rule === 'ambiguous') {
+      return { error: '今日有多個相近車次：' + r.candidates.join('、') + '，請輸入完整車次。' };
+    }
+    if (r.rule === 'notfound') {
+      var inTt = state.tt && state.tt.trains.some(function (t) { return t.no === r.query; });
+      if (inTt) return { error: '車次 ' + r.query + ' 今日沒有車長值乘。' };
+      return { error: '今日班表查無車次 ' + r.query + '。' };
+    }
+    var note = '';
+    if (r.rule === 'suffix') note = '已自動對到車次 ' + r.key + '（輸入 ' + r.query + '）。';
+    return { no: r.key, note: note };
+  }
+
+  function populateTrainDatalist() {
+    var el = q('#trainNoList');
+    if (!el || !state.crew) return;
+    el.innerHTML = Object.keys(state.crew.byTrain).sort().map(function (no) {
+      return '<option value="' + esc(no) + '"></option>';
+    }).join('');
   }
 
   function runQuery() {
@@ -361,6 +624,15 @@
       setStatus('載入當日班表中… ' + done + '/' + total + ' 批');
     }).then(function () {
       setStatus('');
+      if (state.mode === 'train') {
+        var r = resolveTrainForQuery();
+        if (r.error) { setWarn([r.error], false); return; }
+        state.trainNo = r.no;
+        state.trainMatchNote = r.note || '';
+        if (state.trainDelayInput > 0) state.delays[r.no] = state.trainDelayInput;
+        else delete state.delays[r.no];
+        saveScenario();
+      }
       computeAndRender();
     }).catch(function (e) {
       setStatus('');
@@ -371,7 +643,7 @@
   }
 
   function computeAndRender() {
-    state.results = computeResults();
+    state.results = state.mode === 'train' ? computeTrainResults() : computeResults();
     renderTrains();
     renderChains();
     renderStats();
@@ -404,9 +676,9 @@
       if (!train) return;   // §13：查不到 → 不列入（noTimetable 提示）
       var tv = traverseSection(train);
       if (!tv) return;      // 不經過該區間
-      // 方向篩選（§12）
-      if (state.direction === 'south' && !tv.south) return;
-      if (state.direction === 'north' && tv.south) return;
+      // 方向篩選（§12）：forward＝順向（北上）、reverse＝逆向（南下）
+      if (state.direction === 'reverse' && !tv.south) return;
+      if (state.direction === 'forward' && tv.south) return;
       // 時段重疊：進入 < 時段迄 && 離開 > 時段起（§5 Step 2.4）
       if (!(tv.enter < t2 && tv.exit > t1)) return;
       // 推估開關（§7.5）
@@ -478,6 +750,72 @@
     };
   }
 
+  // 指定車次：整趟車次的值乘腿＋每位車長的下一個班（完整影響鏈）
+  // v1 假設整趟延誤 D 分（所有腿一起延後）；每位車長只追下一個班一層。
+  function computeTrainResults() {
+    var crew = state.crew;
+    var no = state.trainNo;
+    var warnings = [];
+    var ttTrain = null;
+    state.tt.trains.forEach(function (t) { if (t.no === no) ttTrain = t; });
+    var ordered = CORE.orderLegs((crew.byTrain[no] || []).slice());
+    var delay = Number(state.delays[no]) || 0;
+    var south = null;
+    if (ttTrain) {
+      var p0 = state.index.posById[ttTrain.stops[0][0]];
+      var p1 = state.index.posById[ttTrain.stops[ttTrain.stops.length - 1][0]];
+      if (p0 != null && p1 != null) south = p1 > p0;
+    }
+    if (south == null && ordered.length) {
+      var first = ordered[0].seg;
+      var last = ordered[ordered.length - 1].seg;
+      var idA = state.index.nameToId[normStn(first.station)];
+      var idB = state.index.nameToId[normStn(last.toStation)];
+      var pa = idA != null ? state.index.posById[idA] : null;
+      var pb = idB != null ? state.index.posById[idB] : null;
+      if (pa != null && pb != null) south = pb > pa;
+    }
+    var legs = [], chains = [], crewSeen = {};
+    var shortCount = 0;
+    ordered.forEach(function (item, i) {
+      var seg = item.seg;
+      var list = crew.byStaff[seg.group + '\u0000' + seg.name] || [];
+      var idx = list.indexOf(seg);
+      var nextRaw = idx >= 0 ? list[idx + 1] : null;
+      var core = CORE.buildChain({
+        seg: segToMin(seg), trainNo: no, delay: delay, delayOn: 'alighting',
+        next: nextRaw ? segToMin(nextRaw) : null,
+        delays: state.delays, threshold: state.buffer
+      });
+      var label = crew.labels[seg.group + '\u0000' + seg.name] || '';
+      var handoverBefore = i > 0 ? ordered[i - 1].handover : null;
+      var chain = {
+        name: seg.name, group: seg.group, label: label,
+        trainNo: no, delay: delay,
+        section: seg.station + '→' + seg.toStation,
+        station: seg.station, toStation: seg.toStation,
+        dep: core.dep, arr: core.arr, delayOn: 'alighting',
+        arrNew: core.arrNew, nextSeg: core.nextSeg || null, next: core.next,
+        enter: core.dep, legIndex: i, handoverBefore: handoverBefore
+      };
+      chains.push(chain);
+      legs.push({
+        seg: seg, train: ttTrain, south: south, delay: delay, label: label,
+        handover: item.handover, handoverBefore: handoverBefore, chain: chain
+      });
+      crewSeen[seg.group + '\u0000' + seg.name] = true;
+      if (chain.next && (chain.next.status === 'short' || chain.next.status === 'missed')) shortCount++;
+      if (ttTrain) checkTimeMismatch(ttTrain, seg, warnings);
+    });
+    return {
+      mode: 'train', trainNo: no, train: ttTrain, legs: legs, chains: chains,
+      warnings: warnings,
+      noTimetable: ttTrain ? [] : [no],
+      matchNote: state.trainMatchNote || '',
+      stats: { trains: legs.length, crew: Object.keys(crewSeen).length, short: shortCount }
+    };
+  }
+
   // §6.4：時刻表與班表時間不一致 → 警告（接駁以班表時間為基準）
   function checkTimeMismatch(train, seg, warnings) {
     var idUp = state.index.nameToId[normStn(seg.station)];
@@ -503,6 +841,14 @@
     }
   }
 
+  // segment（ms）→ 營運日分鐘數（core.buildChain 用）
+  function segToMin(s) {
+    return {
+      title: s.title, station: s.station, toStation: s.toStation,
+      dep: minOfDay(s.startMs), arr: minOfDay(s.endMs)
+    };
+  }
+
   // L3：單一受影響車長的影響鏈（組裝轉接 core.buildChain；§5 Step 4、§13 邊界）
   function buildChain(item, rider) {
     var seg = rider.seg;
@@ -511,18 +857,12 @@
     var list = crew.byStaff[seg.group + '\u0000' + seg.name] || [];
     var idx = list.indexOf(seg);
     var nextRaw = idx >= 0 ? list[idx + 1] : null;
-    function toMin(s) {
-      return {
-        title: s.title, station: s.station, toStation: s.toStation,
-        dep: minOfDay(s.startMs), arr: minOfDay(s.endMs)
-      };
-    }
     var core = CORE.buildChain({
-      seg: toMin(seg),
+      seg: segToMin(seg),
       trainNo: no,
       delay: item.delay,
       delayOn: rider.delayOn,
-      next: nextRaw ? toMin(nextRaw) : null,
+      next: nextRaw ? segToMin(nextRaw) : null,
       delays: state.delays,
       threshold: state.buffer
     });
@@ -576,6 +916,8 @@
   }
 
   function setStats(trains, crew, short) {
+    var label = q('#statTrainsLabel');
+    if (label) label.textContent = state.mode === 'train' ? '值乘腿' : '受影響車次';
     q('#statTrains').textContent = trains;
     q('#statCrew').textContent = crew;
     q('#statShort').textContent = short;
@@ -597,6 +939,10 @@
   function renderTrains() {
     var res = state.results;
     var body = q('#trainBody');
+    var summary = q('#trainSummary');
+    if (res && res.mode === 'train') { renderTrainLegs(res); return; }
+    if (summary) { summary.hidden = true; summary.innerHTML = ''; }
+    q('#trainCardTitle').textContent = '▌車次（依進入區間時間排序）';
     if (!res || !res.trains.length) {
       body.innerHTML = '<tr class="placeholder"><td colspan="9">' +
         (res ? '此條件下沒有受影響的列車。' : '請設定條件後按「查詢」。') + '</td></tr>';
@@ -611,7 +957,7 @@
         '<td class="c-no"><b>' + esc(t.no) + '</b>' +
         (t.extraTrain ? ' <span class="badge muted">加班</span>' : '') + '</td>' +
         '<td>' + esc(shortType(t.type)) + '</td>' +
-        '<td>' + (item.tv.south ? '南下' : '北上') + '</td>' +
+        '<td>' + (item.tv.south ? '逆向' : '順向') + '</td>' +
         '<td>' + esc(stopName(t.stops[0][0]) + '→' + stopName(t.stops[t.stops.length - 1][0])) + '</td>' +
         '<td>' + timeCell(item.tv.enter, item.tv.enterStop, item.tv.approx.enter) + '</td>' +
         '<td>' + timeCell(item.tv.exit, item.tv.exitStop, item.tv.approx.exit) + '</td>' +
@@ -619,6 +965,86 @@
         '<td class="c-crew">' + crewCell(item.riders, t.no) + '</td>' +
         '<td>' + statusBadge(item) + '</td>' +
         '</tr>');
+    });
+    body.innerHTML = rows.join('');
+    bindDelayInputs();
+    bindCrewLinks();
+    q('#btnCsv').disabled = false;
+    q('#btnPrint').disabled = false;
+  }
+
+  // 指定車次：列車摘要＋值乘腿＋交接列
+  function renderTrainLegs(res) {
+    var body = q('#trainBody');
+    var summary = q('#trainSummary');
+    q('#trainCardTitle').textContent = '▌指定車次與值乘腿';
+    if (!res || !res.legs.length) {
+      summary.hidden = true;
+      summary.innerHTML = '';
+      body.innerHTML = '<tr class="placeholder"><td colspan="9">' +
+        (res ? '今日沒有這個車次的值乘資料。' : '請設定條件後按「查詢」。') + '</td></tr>';
+      q('#btnCsv').disabled = true;
+      q('#btnPrint').disabled = true;
+      return;
+    }
+    var t = res.train;
+    var first = res.legs[0].seg;
+    var last = res.legs[res.legs.length - 1].seg;
+    var type = t ? shortType(t.type) : '—';
+    var south = res.legs[0].south;
+    var dir = south == null ? '—' : (south ? '逆向' : '順向');
+    var run = t
+      ? stopName(t.stops[0][0]) + '→' + stopName(t.stops[t.stops.length - 1][0])
+      : first.station + '→' + last.toStation;
+    var ttTimes = t
+      ? '時刻表 ' + fmtMin(t.stops[0][2]) + '→' + fmtMin(t.stops[t.stops.length - 1][1])
+      : '時刻表查無此車次，使用班表時間（車種／方向僅供參考）';
+    summary.innerHTML = '<div class="train-summary-main"><b>' + esc(res.trainNo) + '</b>' +
+      '<span class="badge ok">' + esc(type) + '</span>' +
+      '<span class="badge muted">' + esc(dir) + '</span>' +
+      '<span class="train-run">' + esc(run) + '</span></div>' +
+      '<div class="train-summary-sub">值乘腿 ' + res.legs.length + ' 段｜' + esc(ttTimes) +
+      '｜整趟延誤 +' + Number(res.legs[0].delay || 0) + ' 分</div>';
+    summary.hidden = false;
+
+    var rows = [];
+    res.legs.forEach(function (leg, i) {
+      var seg = leg.seg;
+      var isFirst = i === 0;
+      var isLast = i === res.legs.length - 1;
+      var status;
+      if (isFirst) status = '<span class="badge ok">起班</span>';
+      else if (leg.handoverBefore && leg.handoverBefore.sameCrew) status = '<span class="badge muted">續乘</span>';
+      else status = '<span class="badge warn">接班</span>';
+      if (isLast) status += ' <span class="badge muted">末腿</span>';
+      var delayHtml = isFirst
+        ? delayCell(res.trainNo, leg.delay)
+        : (leg.delay > 0 ? '+' + leg.delay : '<span class="muted">＋0</span>');
+      rows.push('<tr class="leg-row" data-leg="' + i + '">' +
+        '<td class="c-no"><b>' + esc(res.trainNo) + '</b> <span class="badge muted">第 ' + (i + 1) + ' 腿</span></td>' +
+        '<td>' + esc(type) + '</td>' +
+        '<td>' + esc(dir) + '</td>' +
+        '<td>' + esc(seg.station + '→' + seg.toStation) + '</td>' +
+        '<td>' + esc(fmtMin(leg.chain.dep)) + '</td>' +
+        '<td>' + esc(fmtMin(leg.chain.arr)) + '</td>' +
+        '<td class="c-delay">' + delayHtml + '</td>' +
+        '<td class="c-crew"><button type="button" class="crew-link" data-train="' + esc(res.trainNo) +
+          '" data-name="' + esc(seg.name) + '" data-group="' + esc(seg.group) +
+          '" data-leg="' + i + '">' + esc(seg.name) + '（' + esc(seg.group) + '）</button>' +
+          (leg.label ? ' <span class="badge muted">班別 ' + esc(leg.label) + '</span>' : '') + '</td>' +
+        '<td>' + status + '</td>' +
+        '</tr>');
+      if (!isLast) {
+        var h = leg.handover;
+        var text;
+        if (h.sameCrew) text = '同一車長續乘（' + seg.name + '）';
+        else if (!h.sameStation) text = '⚠ 交接站不一致：' + seg.toStation + ' → ' + res.legs[i + 1].seg.station + '，需人工確認';
+        else if (h.gapMin < 0) text = '⚠ 兩腿時間重疊 ' + Math.abs(h.gapMin) + ' 分，需人工確認';
+        else if (h.gapMin > 60) text = '⚠ 兩腿間隔 ' + h.gapMin + ' 分，可能不是同一趟';
+        else text = '↳ ' + seg.toStation + ' ' + fmtMin(leg.chain.arr) + '／' + fmtMin(res.legs[i + 1].chain.dep) +
+          ' 交班：' + seg.group + '/' + seg.name + ' → ' + res.legs[i + 1].seg.group + '/' + res.legs[i + 1].seg.name + '（接班）';
+        rows.push('<tr class="handover-row"><td colspan="9">' + esc(text) + '</td></tr>');
+      }
     });
     body.innerHTML = rows.join('');
     bindDelayInputs();
@@ -669,33 +1095,39 @@
   function bindCrewLinks() {
     qa('.crew-link').forEach(function (btn) {
       btn.addEventListener('click', function () {
-        jumpToChain(this.getAttribute('data-group'), this.getAttribute('data-name'), this.getAttribute('data-train'));
+        jumpToChain(this.getAttribute('data-group'), this.getAttribute('data-name'),
+          this.getAttribute('data-train'), this.getAttribute('data-leg'));
       });
     });
   }
 
-  // 找影響鏈區塊：優先（車長＋車次）完全相符，否則該車長第一個區塊
-  function findChainBlock(group, name, trainNo) {
-    var first = null;
+  // 找影響鏈區塊：優先（車長＋車次＋腿序）完全相符，其次（車長＋車次），最後該車長第一個區塊
+  function findChainBlock(group, name, trainNo, legIndex) {
+    var exact = null, sameTrain = null, first = null;
     var blocks = qa('.chain-block');
     for (var i = 0; i < blocks.length; i++) {
       var b = blocks[i];
       if (b.getAttribute('data-name') !== name || b.getAttribute('data-group') !== group) continue;
-      if (b.getAttribute('data-train') === trainNo) return b;
       if (!first) first = b;
+      if (b.getAttribute('data-train') !== trainNo) continue;
+      if (!sameTrain) sameTrain = b;
+      if (legIndex != null && b.getAttribute('data-leg') === String(legIndex)) {
+        exact = b;
+        break;
+      }
     }
-    return first;
+    return exact || sameTrain || first;
   }
 
-  function jumpToChain(group, name, trainNo) {
-    var el = findChainBlock(group, name, trainNo);
+  function jumpToChain(group, name, trainNo, legIndex) {
+    var el = findChainBlock(group, name, trainNo, legIndex);
     if (!el && state.onlyShort) {
       // 區塊被「只看緩衝時間不足」過濾掉 → 解除過濾再找
       q('#onlyShort').checked = false;
       state.onlyShort = false;
       saveScenario();
       renderChains();
-      el = findChainBlock(group, name, trainNo);
+      el = findChainBlock(group, name, trainNo, legIndex);
     }
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -742,9 +1174,11 @@
   function renderChains() {
     var res = state.results;
     var box = q('#chainBox');
+    var isTrain = !!(res && res.mode === 'train');
     if (!res || !res.chains.length) {
+      var hasRows = res && ((res.trains && res.trains.length) || (res.legs && res.legs.length));
       box.innerHTML = '<p class="placeholder">' +
-        (res && res.trains.length ? '篩出的列車沒有受影響的車長。' : '請設定條件後按「查詢」。') + '</p>';
+        (hasRows ? '篩出的列車沒有受影響的車長。' : '請設定條件後按「查詢」。') + '</p>';
       return;
     }
     // 只看緩衝時間不足（§12）
@@ -759,7 +1193,15 @@
       return;
     }
     var html = [];
+    if (isTrain) {
+      html.push('<p class="chain-note">依值乘腿順序；每塊＝該腿車長＋他的下一個班。整趟延誤 +' +
+        Number(chains[0].delay || 0) + ' 分。</p>');
+    }
+    var prev = null;
     chains.forEach(function (c) {
+      if (isTrain && c.handoverBefore && prev && prev.legIndex === c.legIndex - 1) {
+        html.push(renderChainHandover(prev, c));
+      }
       var rows = [];
       rows.push('<div class="chain-row">' +
         '<span class="chain-no">' + esc(c.trainNo) + '</span> ' +
@@ -812,12 +1254,37 @@
           '</div>');
       }
       html.push('<div class="chain-block" data-group="' + esc(c.group) + '" data-name="' + esc(c.name) +
-        '" data-train="' + esc(c.trainNo) + '">' +
+        '" data-train="' + esc(c.trainNo) + '" data-leg="' + (isTrain ? c.legIndex : '') + '">' +
         '<div class="chain-head">' + esc(c.name) + '（' + esc(c.group) + '）' +
+        (isTrain ? '<span class="chain-label">第 ' + (c.legIndex + 1) + ' 腿</span>' : '') +
         (c.label ? '<span class="chain-label">班別 ' + esc(c.label) + '</span>' : '') + '</div>' +
         rows.join('') + '</div>');
+      prev = c;
     });
     box.innerHTML = html.join('');
+  }
+
+  // 指定車次：兩腿之間的交接提示
+  function renderChainHandover(prev, cur) {
+    var h = cur.handoverBefore;
+    var cls = 'chain-handover';
+    var text;
+    if (h.sameCrew) {
+      text = '↳ 同一車長續乘（' + cur.name + '）';
+    } else if (!h.sameStation) {
+      cls += ' warn';
+      text = '⚠ 交接站不一致：' + prev.toStation + ' → ' + cur.station + '，需人工確認';
+    } else if (h.gapMin < 0) {
+      cls += ' warn';
+      text = '⚠ 兩腿時間重疊 ' + Math.abs(h.gapMin) + ' 分，需人工確認';
+    } else if (h.gapMin > 60) {
+      cls += ' warn';
+      text = '⚠ 兩腿間隔 ' + h.gapMin + ' 分，可能不是同一趟';
+    } else {
+      text = '↳ ' + prev.toStation + ' ' + fmtMin(prev.arr) + '／' + fmtMin(cur.dep) + ' 交班：' +
+        prev.group + '/' + prev.name + ' → ' + cur.group + '/' + cur.name + '（接班）';
+    }
+    return '<div class="' + cls + '">' + esc(text) + '</div>';
   }
 
   function renderStats() {
@@ -834,7 +1301,13 @@
     if (state.tt && state.tt.meta.expireDate && state.today > state.tt.meta.expireDate) {
       lines.push('時刻表有效期到 ' + state.tt.meta.expireDate + '，已過期——請重新產生 timetable.json。');
     }
-    if (res && res.noTimetable.length) {
+    if (res && res.mode === 'train') {
+      if (res.matchNote) lines.push(res.matchNote);
+      if (res.noTimetable.length) {
+        lines.push('時刻表查無車次 ' + res.noTimetable.join('、') +
+          '——已改用班表時間計算，車種／方向僅供參考。可在 tools/timetable-overrides.json 補時刻後重產。');
+      }
+    } else if (res && res.noTimetable.length) {
       lines.push('以下車次在時刻表資料中查不到（未列入篩選，請人工確認）：' + res.noTimetable.join('、') +
         '。可在 tools/timetable-overrides.json 補時刻後重產。');
     }
@@ -852,7 +1325,9 @@
   // ============================================================
   function exportCsv() {
     var res = state.results;
-    if (!res || !res.trains.length) return;
+    if (!res) return;
+    if (res.mode === 'train') { exportTrainCsv(res); return; }
+    if (!res.trains.length) return;
     var lines = [];
     lines.push('受影響列車 ' + state.today.replace(/-/g, '/') + '　' +
       stopName(state.from) + '→' + stopName(state.to) + '　' + state.timeFrom + '-' + state.timeTo +
@@ -866,7 +1341,7 @@
             r.delayOn === 'boarding' ? '[上車延誤]' : '[受影響]');
       }).join(' ') : '（無）';
       lines.push([
-        t.no, t.type, item.tv.south ? '南下' : '北上',
+        t.no, t.type, item.tv.south ? '逆向' : '順向',
         stopName(t.stops[0][0]) + '→' + stopName(t.stops[t.stops.length - 1][0]),
         (item.tv.enterStop ? '' : '~') + fmtMin(item.tv.enter),
         (item.tv.exitStop ? '' : '~') + fmtMin(item.tv.exit),
@@ -876,10 +1351,56 @@
     });
     lines.push('');
     lines.push('影響鏈');
+    appendChainCsv(lines, res);
+    if (res.noTimetable.length) {
+      lines.push('');
+      lines.push('無時刻表車次（未列入）,' + res.noTimetable.join('、'));
+    }
+    downloadCsv(lines, 'affected_' + state.today.replace(/-/g, '') + '.csv');
+  }
+
+  // 指定車次 CSV：值乘腿＋每位車長的下一班（完整影響鏈）
+  function exportTrainCsv(res) {
+    if (!res.legs.length) return;
+    var t = res.train;
+    var dir = res.legs[0].south == null ? '—' : (res.legs[0].south ? '逆向' : '順向');
+    var run = t
+      ? stopName(t.stops[0][0]) + '→' + stopName(t.stops[t.stops.length - 1][0])
+      : res.legs[0].seg.station + '→' + res.legs[res.legs.length - 1].seg.toStation;
+    var lines = [];
+    lines.push('指定車次 ' + state.today.replace(/-/g, '/') + '　' + res.trainNo + '　' + run +
+      '　整趟延誤 +' + Number(res.legs[0].delay || 0) + ' 分　緩衝時間 ' + state.buffer + ' 分');
+    lines.push(['腿序', '車次', '車種', '方向', '起訖', '開車', '抵達', '延誤(分)', '值乘車長', '狀態'].join(','));
+    res.legs.forEach(function (leg, i) {
+      var seg = leg.seg;
+      var status = i === 0 ? '起班'
+        : leg.handoverBefore && leg.handoverBefore.sameCrew ? '續乘'
+        : i === res.legs.length - 1 ? '接班（末腿）' : '接班';
+      lines.push([
+        String(i + 1), res.trainNo, t ? shortType(t.type) : '', dir,
+        seg.station + '→' + seg.toStation,
+        fmtMin(leg.chain.dep), fmtMin(leg.chain.arr), leg.delay,
+        seg.name + '(' + seg.group + ')' + (leg.label ? ' 班別 ' + leg.label : ''), status
+      ].map(csvCell).join(','));
+    });
+    lines.push('');
+    lines.push('影響鏈（依值乘腿順序）');
+    appendChainCsv(lines, res);
+    if (res.noTimetable.length) {
+      lines.push('');
+      lines.push('無時刻表車次（改用班表時間）,' + res.noTimetable.join('、'));
+    }
+    downloadCsv(lines, 'affected_train_' + res.trainNo + '_' + state.today.replace(/-/g, '') + '.csv');
+  }
+
+  // 影響鏈 CSV 區塊（起訖模式／指定車次共用）
+  function appendChainCsv(lines, res) {
+    var isTrain = res.mode === 'train';
     res.chains.forEach(function (c) {
       lines.push([c.name + '(' + c.group + ')', c.label ? '班別 ' + c.label : '', c.trainNo,
         c.section, fmtMin(c.dep) + '-' + fmtMin(c.arr),
-        c.delay > 0 ? '+' + c.delay + ' → ' + fmtMin(c.delayOn === 'boarding' ? c.dep + c.delay : c.arrNew) : '＋0'
+        c.delay > 0 ? '+' + c.delay + ' → ' + fmtMin(c.delayOn === 'boarding' ? c.dep + c.delay : c.arrNew) : '＋0',
+        isTrain ? '第 ' + (c.legIndex + 1) + ' 腿' : ''
       ].map(csvCell).join(','));
       var n = c.next;
       if (n.kind === 'lasttrain') {
@@ -897,14 +1418,13 @@
           '緩衝時間 ' + n.buffer + ' 分（' + st + '）'].map(csvCell).join(','));
       }
     });
-    if (res.noTimetable.length) {
-      lines.push('');
-      lines.push('無時刻表車次（未列入）,' + res.noTimetable.join('、'));
-    }
+  }
+
+  function downloadCsv(lines, filename) {
     var blob = new Blob(['\uFEFF' + lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
     var a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = 'affected_' + state.today.replace(/-/g, '') + '.csv';
+    a.download = filename;
     document.body.appendChild(a);
     a.click();
     setTimeout(function () {
@@ -923,20 +1443,46 @@
   // 重置／全部套用延誤
   // ============================================================
   function resetForm() {
+    var d = defaultStationIds();
+    q('input[name="queryMode"][value="section"]').checked = true;
+    state.mode = 'section';
+    state.trainInput = '';
+    state.trainNo = '';
+    state.trainDelayInput = 0;
+    state.trainMatchNote = '';
+    q('#trainNo').value = '';
+    q('#trainDelay').value = '0';
+    if (d) {
+      if (comboFrom) comboFrom.setValue(d.from);
+      if (comboTo) comboTo.setValue(d.to);
+      state.from = d.from;
+      state.to = d.to;
+    }
     q('#timeFrom').value = DEFAULTS.timeFrom;
     q('#timeTo').value = DEFAULTS.timeTo;
     q('#direction').value = 'both';
     q('#bufferMin').value = String(DEFAULTS.buffer);
     q('#includePass').checked = true;
     q('#onlyShort').checked = false;
+    state.timeFrom = DEFAULTS.timeFrom;
+    state.timeTo = DEFAULTS.timeTo;
+    state.direction = 'both';
+    state.buffer = DEFAULTS.buffer;
+    state.includePass = true;
+    state.onlyShort = false;
     state.delays = {};
+    state.results = null;
     saveScenario();
-    populateStations();
+    applyModeToForm();
     setWarn([]);
     setStats('–', '–', '–');
-    state.results = null;
     q('#trainBody').innerHTML = '<tr class="placeholder"><td colspan="9">請設定條件後按「查詢」。</td></tr>';
     q('#chainBox').innerHTML = '<p class="placeholder">請設定條件後按「查詢」。</p>';
+    q('#trainSummary').hidden = true;
+    q('#trainSummary').innerHTML = '';
+    q('#trainCardTitle').textContent = '▌車次（依進入區間時間排序）';
+    q('#btnCsv').disabled = true;
+    q('#btnPrint').disabled = true;
   }
 
   // 套用到所有篩選車次／清除所有延誤（§12）
@@ -961,14 +1507,44 @@
   // ============================================================
   // 初始化
   // ============================================================
+  // 依查詢方式顯示／隱藏欄位（data-mode）
+  function applyModeToForm() {
+    qa('[data-mode]').forEach(function (el) {
+      el.hidden = el.getAttribute('data-mode') !== state.mode;
+    });
+  }
+
+  // 指定車次：本車延誤（快速鍵／輸入框共用）；已查詢過就即時重算
+  function setTrainDelay(v) {
+    v = parseInt(v, 10);
+    if (isNaN(v) || v < 0) v = 0;
+    if (v > 600) v = 600;
+    q('#trainDelay').value = String(v);
+    state.trainDelayInput = v;
+    if (state.trainNo) {
+      if (v > 0) state.delays[state.trainNo] = v;
+      else delete state.delays[state.trainNo];
+    }
+    saveScenario();
+    if (state.mode === 'train' && state.results && state.results.mode === 'train') {
+      recalcChain();
+    }
+  }
+
   function applyScenarioToForm() {
+    if (['both', 'forward', 'reverse'].indexOf(state.direction) < 0) state.direction = 'both';
+    var radio = q('input[name="queryMode"][value="' + state.mode + '"]');
+    if (radio) radio.checked = true;
+    q('#trainNo').value = state.trainInput || '';
+    q('#trainDelay').value = String(state.trainDelayInput || 0);
     q('#timeFrom').value = state.timeFrom;
     q('#timeTo').value = state.timeTo;
     q('#direction').value = state.direction;
     q('#bufferMin').value = String(state.buffer);
     q('#includePass').checked = state.includePass;
     q('#onlyShort').checked = state.onlyShort;
-    // from/to 在 populateStations 之後套用
+    applyModeToForm();
+    // from/to 在 initStationCombos 之後套用
   }
 
   function bindEvents() {
@@ -999,10 +1575,43 @@
       saveScenario();
       computeAndRender();
     });
-    q('#fromStation').addEventListener('change', function () { state.from = this.value; saveScenario(); });
-    q('#toStation').addEventListener('change', function () { state.to = this.value; saveScenario(); });
     q('#timeFrom').addEventListener('change', function () { state.timeFrom = this.value || DEFAULTS.timeFrom; saveScenario(); });
     q('#timeTo').addEventListener('change', function () { state.timeTo = this.value || DEFAULTS.timeTo; saveScenario(); });
+
+    // 查詢方式切換：換模式就清掉上一次結果（欄位語意不同，避免誤讀）
+    qa('input[name="queryMode"]').forEach(function (radio) {
+      radio.addEventListener('change', function () {
+        state.mode = this.value;
+        state.results = null;
+        applyModeToForm();
+        saveScenario();
+        setWarn([]);
+        setStats('–', '–', '–');
+        q('#trainBody').innerHTML = '<tr class="placeholder"><td colspan="9">請設定條件後按「查詢」。</td></tr>';
+        q('#chainBox').innerHTML = '<p class="placeholder">請設定條件後按「查詢」。</p>';
+        q('#trainSummary').hidden = true;
+        q('#trainSummary').innerHTML = '';
+        q('#trainCardTitle').textContent = state.mode === 'train'
+          ? '▌指定車次與值乘腿' : '▌車次（依進入區間時間排序）';
+        q('#btnCsv').disabled = true;
+        q('#btnPrint').disabled = true;
+        if (state.mode === 'train') q('#trainNo').focus();
+      });
+    });
+    q('#trainNo').addEventListener('change', function () {
+      state.trainInput = this.value;
+      saveScenario();
+    });
+    q('#trainNo').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); runQuery(); }
+    });
+    q('#trainDelay').addEventListener('change', function () { setTrainDelay(this.value); });
+    qa('.tqbtn').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        var cur = parseInt(q('#trainDelay').value, 10) || 0;
+        setTrainDelay(cur + Number(this.getAttribute('data-train-add')));
+      });
+    });
   }
 
   function init() {
@@ -1019,14 +1628,13 @@
         setWarn([state.ttError], true);
         return;
       }
-      populateStations();
-      // 情境裡的 from/to（站碼）套回下拉
-      if (state.from && q('#fromStation').querySelector('option[value="' + state.from + '"]')) {
-        q('#fromStation').value = state.from;
-      }
-      if (state.to && q('#toStation').querySelector('option[value="' + state.to + '"]')) {
-        q('#toStation').value = state.to;
-      }
+      // 情境裡的 from/to（站碼）優先，其次預設（彰化→嘉義）
+      var scFrom = state.from, scTo = state.to;
+      initStationCombos();
+      if (scFrom && comboFrom) comboFrom.setValue(scFrom);
+      if (scTo && comboTo) comboTo.setValue(scTo);
+      state.from = comboFrom ? comboFrom.getValue() : state.from;
+      state.to = comboTo ? comboTo.getValue() : state.to;
       renderTtMeta();
       q('#btnQuery').disabled = false;
       // 先在背景把當日班表載起來（首次查詢就不用等）
@@ -1034,6 +1642,7 @@
         setStatus('預載當日班表… ' + done + '/' + total + ' 批');
       }).then(function () {
         setStatus('');
+        populateTrainDatalist();
       }).catch(function (e) {
         setStatus('');
         setWarn(['無法預載當日班表（按「查詢」會再試一次）：' + e.message], true);

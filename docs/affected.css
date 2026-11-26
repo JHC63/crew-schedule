@@ -32,6 +32,7 @@
 }
 
 *, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
   margin: 0;
@@ -92,6 +93,30 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .card-title { margin: 0 0 12px; font-size: 17px; letter-spacing: 0.02em; }
 
 /* ---------- 表單 ---------- */
+.mode-switch {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  margin-bottom: 14px;
+  border-radius: 12px;
+  background: var(--line-soft);
+  border: 1px solid var(--line);
+}
+.mode-opt { cursor: pointer; user-select: none; }
+.mode-opt input { position: absolute; opacity: 0; pointer-events: none; }
+.mode-opt span {
+  display: block;
+  padding: 7px 16px;
+  border-radius: 9px;
+  font-size: 14px; font-weight: 600; color: var(--muted);
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+.mode-opt input:checked + span {
+  background: #fff; color: var(--green-deep);
+  box-shadow: 0 1px 3px rgba(17, 43, 28, 0.12);
+}
+.mode-opt input:focus-visible + span { outline: 2px solid var(--green-soft); }
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -112,6 +137,53 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .buffer-wrap { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 .buffer-wrap input { flex: 1; min-width: 0; }
 .field-time input { font-variant-numeric: tabular-nums; }
+
+/* ---------- 起訖站自刻 combobox ---------- */
+.combo { position: relative; }
+.combo > input[type="text"] { width: 100%; }
+.combo-list {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 4px);
+  left: 0; right: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: 0 12px 30px rgba(17, 43, 28, 0.16);
+}
+.combo-opt {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 15px;
+  color: var(--ink);
+}
+.combo-opt:hover, .combo-opt.active { background: var(--green-soft); }
+.combo-opt.selected { font-weight: 700; }
+.combo-opt mark { background: var(--amber-soft); color: inherit; padding: 0; border-radius: 3px; }
+.combo-code { color: var(--muted-2); font-size: 12px; font-variant-numeric: tabular-nums; }
+.combo-empty { padding: 10px 12px; color: var(--muted); font-size: 14px; }
+
+/* ---------- 指定車次延誤 ---------- */
+.field-train-delay .buffer-wrap { max-width: 150px; }
+.train-quick { display: flex; gap: 4px; margin-top: 2px; }
+.tqbtn {
+  padding: 4px 7px;
+  border-radius: 7px;
+  background: var(--line-soft);
+  color: var(--ink-2);
+  font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums;
+}
+.tqbtn:hover { background: var(--green-soft); color: var(--green-deep); }
 
 .switches { display: flex; flex-wrap: wrap; gap: 8px 24px; margin-top: 14px; }
 .switch {
@@ -194,6 +266,29 @@ table.grid td.num, table.grid th.num { text-align: right; }
 table.grid .placeholder { color: var(--muted); padding: 16px 10px; white-space: normal; }
 table.grid td.c-no b { font-size: 16px; }
 
+/* ---------- 指定車次：列車摘要／值乘腿 ---------- */
+.train-summary {
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--green-soft);
+  border: 1px solid #d6f0e0;
+  line-height: 1.7;
+}
+.train-summary-main { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 17px; }
+.train-summary-main b { font-size: 20px; font-variant-numeric: tabular-nums; }
+.train-summary-sub { font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+.train-run { font-weight: 600; color: var(--ink-2); }
+table.grid tr.leg-row td { background: #fff; }
+table.grid tr.handover-row td {
+  padding: 5px 12px 5px 26px;
+  font-size: 13px;
+  color: var(--muted);
+  background: var(--line-soft);
+  border-bottom: 1px dashed var(--line);
+}
+table.grid tr.handover-row td b { color: var(--ink-2); }
+
 /* ---------- 延誤欄 ---------- */
 .delay-wrap { display: inline-flex; align-items: center; gap: 7px; }
 .delay-input {
@@ -252,6 +347,17 @@ table.grid td.c-no b { font-size: 16px; }
 .chain-time { font-variant-numeric: tabular-nums; font-family: var(--mono); font-size: 14px; }
 .chain-delay { font-variant-numeric: tabular-nums; color: var(--ink); }
 .chain-delay.muted { color: var(--muted); }
+.chain-note { margin: 0 2px 10px; font-size: 13px; color: var(--muted); }
+.chain-handover {
+  margin: 4px 0 6px;
+  padding: 5px 12px;
+  border-radius: 9px;
+  background: var(--line-soft);
+  border-left: 3px solid var(--green);
+  font-size: 13.5px;
+  color: var(--ink-2);
+}
+.chain-handover.warn { background: var(--amber-soft); border-left-color: var(--amber); color: #7a5410; }
 
 /* ---------- 影響鏈跳轉顯目顯示 ---------- */
 .chain-block { scroll-margin-top: 12px; border-radius: 10px; padding-left: 8px; padding-right: 8px; margin-left: -8px; }

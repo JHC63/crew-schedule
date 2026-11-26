@@ -29,30 +29,61 @@
     </header>
 
     <section class="card form-card" aria-label="查詢條件">
+      <div class="mode-switch" role="radiogroup" aria-label="查詢方式">
+        <label class="mode-opt"><input type="radio" name="queryMode" value="section" checked><span>起訖區間</span></label>
+        <label class="mode-opt"><input type="radio" name="queryMode" value="train"><span>指定車次</span></label>
+      </div>
       <div class="form-grid">
-        <label class="field">
-          <span class="field-label">起站</span>
-          <select id="fromStation" disabled><option>載入中…</option></select>
-        </label>
-        <label class="field">
-          <span class="field-label">迄站</span>
-          <select id="toStation" disabled><option>載入中…</option></select>
-        </label>
-        <label class="field field-time">
+        <div class="field" data-mode="section">
+          <label class="field-label" for="fromStation">起站</label>
+          <div class="combo">
+            <input id="fromStation" type="text" role="combobox" aria-expanded="false"
+                   aria-controls="fromList" aria-autocomplete="list" autocomplete="off"
+                   placeholder="輸入站名或站碼" disabled>
+            <input type="hidden" id="fromStationId">
+            <ul id="fromList" class="combo-list" role="listbox" aria-label="起站" hidden></ul>
+          </div>
+        </div>
+        <div class="field" data-mode="section">
+          <label class="field-label" for="toStation">迄站</label>
+          <div class="combo">
+            <input id="toStation" type="text" role="combobox" aria-expanded="false"
+                   aria-controls="toList" aria-autocomplete="list" autocomplete="off"
+                   placeholder="輸入站名或站碼" disabled>
+            <input type="hidden" id="toStationId">
+            <ul id="toList" class="combo-list" role="listbox" aria-label="迄站" hidden></ul>
+          </div>
+        </div>
+        <label class="field field-time" data-mode="section">
           <span class="field-label">時段起</span>
           <input type="time" id="timeFrom" value="14:00">
         </label>
-        <label class="field field-time">
+        <label class="field field-time" data-mode="section">
           <span class="field-label">時段迄</span>
           <input type="time" id="timeTo" value="16:00">
         </label>
-        <label class="field">
+        <label class="field" data-mode="section">
           <span class="field-label">方向</span>
           <select id="direction">
             <option value="both">雙向</option>
-            <option value="south">南下</option>
-            <option value="north">北上</option>
+            <option value="forward">順向（北上）</option>
+            <option value="reverse">逆向（南下）</option>
           </select>
+        </label>
+        <label class="field" data-mode="train">
+          <span class="field-label">車次</span>
+          <input id="trainNo" type="text" autocomplete="off" placeholder="例如 114、115A" list="trainNoList">
+          <datalist id="trainNoList"></datalist>
+        </label>
+        <label class="field field-train-delay" data-mode="train">
+          <span class="field-label">本車延誤</span>
+          <span class="buffer-wrap"><input type="number" id="trainDelay" value="0" min="0" max="600" step="1"> 分</span>
+          <span class="train-quick">
+            <button type="button" class="tqbtn" data-train-add="5">+5</button>
+            <button type="button" class="tqbtn" data-train-add="10">+10</button>
+            <button type="button" class="tqbtn" data-train-add="15">+15</button>
+            <button type="button" class="tqbtn" data-train-add="30">+30</button>
+          </span>
         </label>
         <label class="field field-buffer">
           <span class="field-label">緩衝時間</span>
@@ -60,7 +91,7 @@
         </label>
       </div>
       <div class="form-row switches">
-        <label class="switch"><input type="checkbox" id="includePass" checked><span>包含通過未停靠（推估）</span></label>
+        <label class="switch" data-mode="section"><input type="checkbox" id="includePass" checked><span>包含通過未停靠（推估）</span></label>
         <label class="switch"><input type="checkbox" id="onlyShort"><span>只看緩衝時間不足</span></label>
       </div>
       <div class="form-actions">
@@ -78,7 +109,7 @@
 
     <section class="card" aria-label="統計">
       <div class="stats">
-        <span class="stat">受影響車次 <b id="statTrains">–</b></span>
+        <span class="stat"><span id="statTrainsLabel">受影響車次</span> <b id="statTrains">–</b></span>
         <span class="sep" aria-hidden="true">｜</span>
         <span class="stat">受影響車長 <b id="statCrew">–</b></span>
         <span class="sep" aria-hidden="true">｜</span>
@@ -88,8 +119,8 @@
 
     <section class="card">
       <div class="card-title-row">
-        <h2 class="card-title">▌車次（依進入區間時間排序）</h2>
-        <div class="bulk-tools">
+        <h2 class="card-title" id="trainCardTitle">▌車次（依進入區間時間排序）</h2>
+        <div class="bulk-tools" data-mode="section">
           <span class="bulk-label">全部＋</span>
           <input type="number" id="bulkDelay" min="0" max="600" step="1" value="10">
           <span class="bulk-unit">分</span>
@@ -97,6 +128,7 @@
           <button id="btnClearDelays" class="btn small" type="button">清除所有延誤</button>
         </div>
       </div>
+      <div id="trainSummary" class="train-summary" hidden></div>
       <div class="table-wrap">
         <table class="grid" id="trainTable">
           <thead>

@@ -48,6 +48,90 @@
       .trim();
   }
 
+  // ---------- 輸入正規化（指定車次／站名搜尋用） ----------
+  // 全形英數（含全形括號）→ 半形；全形空格 → 半形空格
+  function toHalfWidth(s) {
+    return String(s || '')
+      .replace(/[\uFF01-\uFF5E]/g, function (ch) {
+        return String.fromCharCode(ch.charCodeAt(0) - 0xFEE0);
+      })
+      .replace(/\u3000/g, ' ');
+  }
+  // 車次輸入：全形→半形、去空白、去括號附註、去「便」、A/B 轉大寫
+  // 例：'１１５Ａ'→'115A'、'115 a'→'115A'、'3292B便'→'3292B'
+  function normalizeTrainInput(input) {
+    var t = toHalfWidth(input).trim().replace(/\s+/g, '');
+    if (/^\d/.test(t)) {
+      t = t.replace(/\([^)]*\)/g, '').replace(/（[^）]*）/g, '').replace(/便$/, '');
+    }
+    return t.toUpperCase();
+  }
+  // 車次比對：完全符合優先；輸入無 A/B 後綴且今日只有一個 A/B 腿 → 自動對到；
+  // 多個 A/B 腿 → ambiguous；有 A/B 後綴但查無 → 不退回基數（避免對到反方向／另一班）。
+  // keys = 今日班表車次字串（crew.byTrain 的 key）
+  function resolveTrainNo(input, keys) {
+    var query = normalizeTrainInput(input);
+    var list = (keys || []).map(function (k) { return String(k); });
+    if (!query) return { query: query, key: null, rule: 'empty', candidates: [] };
+    var exact = list.filter(function (k) { return k === query; });
+    if (exact.length) return { query: query, key: exact[0], rule: 'exact', candidates: exact };
+    if (!/[AB]$/.test(query)) {
+      var escQ = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      var re = new RegExp('^' + escQ + '[AB]$');
+      var vars = list.filter(function (k) { return re.test(k); }).sort();
+      if (vars.length === 1) return { query: query, key: vars[0], rule: 'suffix', candidates: vars };
+      if (vars.length > 1) return { query: query, key: null, rule: 'ambiguous', candidates: vars };
+    }
+    return { query: query, key: null, rule: 'notfound', candidates: [] };
+  }
+
+  // ---------- 站名搜尋（起訖站自刻 combobox） ----------
+  // 空查詢 → 全部（依 pos 排序）；否則站名正規化子字串或站碼前綴
+  function filterStations(stations, query) {
+    var q = normStn(toHalfWidth(query));
+    var out = [];
+    (stations || []).forEach(function (s) {
+      if (!q || normStn(s.name).indexOf(q) >= 0 || String(s.id).indexOf(q) === 0) out.push(s);
+    });
+    out.sort(function (a, b) {
+      return (Number(a.pos) || 0) - (Number(b.pos) || 0) || String(a.id).localeCompare(String(b.id));
+    });
+    return out;
+  }
+  // 只接受「完全符合」的站名或站碼（給 blur／查詢前解析用）
+  function resolveStation(stations, text) {
+    var q = normStn(toHalfWidth(text));
+    if (!q) return null;
+    var list = stations || [];
+    for (var i = 0; i < list.length; i++) {
+      if (String(list[i].id) === q || normStn(list[i].name) === q) return list[i];
+    }
+    return null;
+  }
+
+  // ---------- 指定車次：值乘腿排序／交接資訊 ----------
+  // 回傳 [{ seg, handover }]，依 startMs 排序；handover 描述「本腿→下一腿」：
+  //   sameCrew：同一車長續乘；sameStation：下車站＝下一腿上車站；gapMin：兩腿間隔（分，可負）
+  function orderLegs(segments) {
+    var list = (segments || []).slice().sort(function (a, b) {
+      return (Number(a.startMs) || 0) - (Number(b.startMs) || 0) ||
+        (Number(a.endMs) || 0) - (Number(b.endMs) || 0) ||
+        String(a.title || '').localeCompare(String(b.title || ''));
+    });
+    return list.map(function (seg, i) {
+      var next = list[i + 1] || null;
+      var handover = null;
+      if (next) {
+        handover = {
+          sameCrew: seg.group === next.group && seg.name === next.name,
+          sameStation: normStn(seg.toStation) === normStn(next.station),
+          gapMin: Math.round((Number(next.startMs) - Number(seg.endMs)) / 60000)
+        };
+      }
+      return { seg: seg, handover: handover };
+    });
+  }
+
   // ---------- 站索引 ----------
   // stations = [{ id, name, pos, inStationTable }]
   // posById：站碼 → 沿線站序；nameToId：正規化站名 → 站碼（班表站名對照用）
@@ -154,7 +238,10 @@
   // ---------- L2：車長與事故區間的關係（§5 Step 3） ----------
   // seg = staffSchedule 的 train segment（station=上車、toStation=下車，班表站名）
   // 回傳 { affected, delayOn: 'alighting'|'boarding'|null, unknownStation? }
-  //   - 下車站序 ≤ 進入端 → 未受影響（車列入、車長標未受影響）
+  //   - 下車站序 < 進入端 → 未受影響（車列入、車長標未受影響）
+  //   - 下車站序 ＝ 進入端 → 受影響（延誤落在 alighting）
+  //     （2026/11/26 使用者回饋改：3207 延誤 90 時，在彰化（進入端）下車的車長
+  //      抵達也延後 90 → 接不上下一班。延誤回堵會漫延到進入端之前，寧可多提醒。）
   //   - 上車站序 ≥ 離開端 → 受影響（延誤落在 boarding）
   //   - 其他 → 受影響（延誤落在 alighting）
   function classifyRider(seg, tv, index, fromId, toId) {
@@ -170,7 +257,7 @@
     var south = tv.south;
     var enterPos = south ? Math.min(pFrom, pTo) : Math.max(pFrom, pTo);
     var exitPos = south ? Math.max(pFrom, pTo) : Math.min(pFrom, pTo);
-    var offBefore = south ? (pDown <= enterPos) : (pDown >= enterPos);
+    var offBefore = south ? (pDown < enterPos) : (pDown > enterPos);
     if (offBefore) return { affected: false, delayOn: null };
     var boardAfter = south ? (pUp >= exitPos) : (pUp <= exitPos);
     if (boardAfter) return { affected: true, delayOn: 'boarding' };
@@ -250,7 +337,13 @@
     parseHM: parseHM,
     fmtMin: fmtMin,
     normalizeTrainNo: normalizeTrainNo,
+    normalizeTrainInput: normalizeTrainInput,
+    resolveTrainNo: resolveTrainNo,
     normStn: normStn,
+    toHalfWidth: toHalfWidth,
+    filterStations: filterStations,
+    resolveStation: resolveStation,
+    orderLegs: orderLegs,
     makeIndex: makeIndex,
     interpolateAt: interpolateAt,
     passInfo: passInfo,
