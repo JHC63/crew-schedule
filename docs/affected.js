@@ -139,18 +139,23 @@
     });
   }
 
-  // 區間下拉：只用 Station 表的站（timetable.json 裡 inStationTable === true，§9）
-  function stationTableStations() {
+  // 區間下拉：主線基隆(0900)～枋寮(5120)沿線各站（TDX 站碼範圍），
+  // 不是只列班表出現過的站（2026/11/26 使用者定案：起訖站要整條營運線，
+  // 含員林、台北、台南等沒人上下車的中途站；東部幹線 7000+ 不列）。
+  // §9 原規劃「只用 Station 表的站」由此取代；inStationTable 欄位保留在資料裡供日後使用。
+  var CORRIDOR_ID_MIN = '0900';
+  var CORRIDOR_ID_MAX = '5120';
+  function corridorStations() {
     if (!state.tt) return [];
-    return state.tt.stations.filter(function (s) { return s.inStationTable === true; })
-      .slice()
-      .sort(function (a, b) { return a.pos - b.pos; });
+    return state.tt.stations.filter(function (s) {
+      return s.id >= CORRIDOR_ID_MIN && s.id <= CORRIDOR_ID_MAX;
+    }).slice().sort(function (a, b) { return a.pos - b.pos; });
   }
 
   function populateStations() {
     var fromSel = q('#fromStation');
     var toSel = q('#toStation');
-    var list = stationTableStations();
+    var list = corridorStations();
     if (!list.length) {
       fromSel.innerHTML = '<option value="">（無站點資料）</option>';
       toSel.innerHTML = fromSel.innerHTML;
@@ -555,7 +560,7 @@
     var src = m.srcUpdateTime ? m.srcUpdateTime.replace('T', ' ').slice(0, 16) : '';
     el.textContent = '時刻表有效期 ' + m.effectiveDate + ' ～ ' + m.expireDate +
       (src ? '｜資料時間 ' + src : '') +
-      '｜站點 ' + stationTableStations().length + ' 站／車次 ' + state.tt.trains.length + ' 筆';
+      '｜站點 ' + corridorStations().length + ' 站（基隆～枋寮）／車次 ' + state.tt.trains.length + ' 筆';
   }
 
   function setWarn(lines, isError) {

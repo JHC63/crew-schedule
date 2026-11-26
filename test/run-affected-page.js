@@ -240,7 +240,7 @@ const selftestScript = `<script>
       T('S01 __AFFECTED_READY__', window.__AFFECTED_READY__ === true);
       T('S02 零 JS 錯誤', window.__ERRORS__.length === 0, window.__ERRORS__.join('；'));
       T('S03 時刻表 meta 已渲染', /車次 6 筆/.test(q('#ttMeta').textContent));
-      T('S04 站下拉有 6 站（inStationTable）', q('#fromStation').querySelectorAll('option').length === 6);
+      T('S04 站下拉有 6 站（主線範圍，非只班表站）', q('#fromStation').querySelectorAll('option').length === 6);
       T('S05 預設 彰化→嘉義', q('#fromStation').selectedOptions[0].text === '彰化' && q('#toStation').selectedOptions[0].text === '嘉義');
     });
     step('自動查詢結果', function () {

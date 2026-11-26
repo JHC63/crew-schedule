@@ -284,6 +284,11 @@ baseline 留檔：`test/results-baseline.txt`、`%TEMP%\opencode\run-api-baselin
 
 #### 新環境教訓（2026/11/25，affected 實作期）
 
+0. **2026/11/26 使用者回報三項已修**：起訖站下拉鎖定（populateStations 忘記解除 disabled）；
+   車次列車長姓名可點 → 跳影響鏈該區塊＋閃爍標示（被 onlyShort 過濾時自動解除）；
+   字體排版整體放大（基準 15px、表格 15px、統計 24px、版面 1200px）。
+   **區間下拉定案變更**：改用時刻表主線站（基隆 0900～枋寮 5120，131 站），
+   不只用 Station 表的 20 站——§9 的「下拉只用 Station 表」規則被取代。
 1. **PowerShell 5.1 不支援 `&&` 串接**（ParserError）；內嵌 `node -e "..."` 一逗號引號就爆——
    多行 Node 腳本**一律寫檔再跑**，別用 `-e` 內嵌。
 2. **測試頁的 `<script src>` 相對路徑**以測試頁所在目錄解析——測試頁放 `test/` 就找不到 `docs/` 的
@@ -296,3 +301,6 @@ baseline 留檔：`test/results-baseline.txt`、`%TEMP%\opencode\run-api-baselin
 5. **`applyAll`／延誤是 per-train 單一值（覆蓋不累加）**＝「多筆延誤取 max 不取 sum」的 v1 實現。
 6. 真實資料裡同一車長會在**同一查詢的多個車次**受影響（如小林 301/303 各一條鏈）——
    鏈數 ≥ 車長數是正常現象（鏈＝(車長，車次) 對）。
+7. **`git commit -m "中文"` 會被 PowerShell 以 Big5 傳參**→ 儲存的訊息亂碼（git log 與 %B 讀出都是）。
+   中文 commit 訊息一律：Node 寫 UTF-8 無 BOM 訊息檔 → `git commit -F <file>`（amend 同理）。
+   驗證用 `git cat-file commit HEAD` 再以 UTF-8 解碼（PowerShell `>` 重導向會轉 UTF-16，別用它驗）。

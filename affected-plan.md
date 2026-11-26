@@ -197,7 +197,10 @@ trains: [{
 ```
 
 - 時間在**匯入時**轉成「營運日 00:00 起算分鐘數」，前端不解析時間字串。
-- 站清單取「TDX 有出現 ∪ Station 表」聯集；區間下拉**只用 Station 表的站**（營運區域）。
+- 站清單取「TDX 有出現 ∪ Station 表」聯集。
+- **區間下拉（2026/11/26 使用者定案，取代原「只用 Station 表的站」）**：主線**基隆(0900)～枋寮(5120)
+  沿線各站**（時刻表站碼範圍過濾，實測 131 站，含員林、臺北、臺南等沒人上下車的中途站；
+  東部幹線 7000+ 不列）。`inStationTable` 欄位保留在資料裡標記 Station 表原站。
 - 前端 fetch 加 cache-busting（`?v=generatedAt`）；**頁面不可用 `file://` 開**（fetch JSON 會被擋），一律用 Pages 網址。
 
 ---
@@ -338,7 +341,7 @@ data/timetable.json（同源）
 | --- | --- |
 | `Schedule_S` 完整 CSV | ✅ 已提供（2026/11/25，repo 外路徑：`C:\Users\User\Documents\佳合資料夾\道路駕駛路線\班表查詢 - Schedule_S.csv`；219 列＝190 班次列＋29 非班次列、A/B/C 三組、147 車次、20 站） |
 | TDX 定期時刻表完整 JSON | ✅ 已提供（`docs/1161125GeneralTrainTimetable.json`：954 車次、240 站、有效期 2026-07-01～2026-12-31、SrcUpdateTime 2026-11-24T13:51:48+08:00；`EffectiveDate/ExpireDate/SrcUpdateTime` 在**頂層**而非每車次） |
-| Station 表是否涵蓋區域內所有站（含員林這種沒人上下車的） | ✅ 確認（2026/11/25 線上 bootstrap）：20 站（基隆～枋寮），**無員林**——區間下拉就是這 20 站；要加站先補進 Google Sheet 的 Station 表 |
+| Station 表是否涵蓋區域內所有站（含員林這種沒人上下車的） | ✅ 確認（2026/11/25 線上 bootstrap）：20 站（基隆～枋寮），**無員林**。→ 2026/11/26 定案：區間下拉改用時刻表主線站（基隆～枋寮 131 站），不受 Station 表限制 |
 | 跨夜時間格式（00:35 vs 24:35） | ✅ 確認：TDX 全部 `HH:MM`（無 24:xx），跨夜由「後站時間 < 前站時間」偵測並 +1440（實測 20 筆） |
 | 站碼排序 vs KM 順序抽查 | ✅ 匯入腳本報告：19 站（有 KM 者）站碼排序與 Station 表 KM 順序**全部一致** |
 | 臺／台正規化規則 | ✅ 已實作（沿用 Code.gs `normalizeStationName` 規則；TDX 用「臺中」，Station 表用「台中」，正規化後互通） |
