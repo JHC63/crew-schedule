@@ -54,6 +54,11 @@ const TRAINS = [
   { no: '303', type: '區間', typeCode: '6', headsign: '往台北', extraTrain: false,
     serviceDay: { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1, holiday: 1 }, note: '',
     stops: [['4080', 914, 914], ['3360', 990, 990], ['1000', 1060, 1060]] },
+  // 401 南下：台北 13:00 → 臺中 14:00 → 彰化 15:00 → 嘉義 16:00
+  // 唯一車長阿明在臺中（進入端前）下車 → 全車未受影響 → 整列不列（2026/11/27 使用者定案）
+  { no: '401', type: '區間', typeCode: '6', headsign: '往嘉義', extraTrain: false,
+    serviceDay: { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1, holiday: 1 }, note: '',
+    stops: [['1000', 780, 780], ['3300', 840, 840], ['3360', 900, 900], ['4080', 960, 960]] },
   // 501 跨夜：高雄 23:00 → 嘉義 23:57(+1 00:17) → 彰化(+1 01:20)——時段外，不會入選
   { no: '501', type: '區間', typeCode: '6', headsign: '往台北', extraTrain: false,
     serviceDay: { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1, holiday: 1 }, note: '在嘉義跨日。',
@@ -99,6 +104,10 @@ const CREW = [
   ] },
   { name: '阿忠', group: 'D', label: '073-1', segs: [
     { title: '101', station: '彰化', toStation: '嘉義', dep: 850, arr: 910 }
+  ] },
+  // 401 的唯一車長：臺中下車（進入端彰化之前）→ 未受影響 → 401 整列不列
+  { name: '阿明', group: 'D', label: '074-1', segs: [
+    { title: '401', station: '台北', toStation: '臺中', dep: 780, arr: 840 }
   ] },
   // 114 三段交接：小葉→小陳→小周，各自再追下一個班（指定車次完整影響鏈）
   { name: '小葉', group: 'A', label: '114-1', segs: [
@@ -290,7 +299,7 @@ const selftestScript = `<script>
     step('頁面就緒', function () {
       T('S01 __AFFECTED_READY__', window.__AFFECTED_READY__ === true);
       T('S02 零 JS 錯誤', window.__ERRORS__.length === 0, window.__ERRORS__.join('；'));
-      T('S03 時刻表 meta 已渲染', /車次 10 筆/.test(q('#ttMeta').textContent));
+      T('S03 時刻表 meta 已渲染', /車次 11 筆/.test(q('#ttMeta').textContent));
       T('S04 起站 combobox 未鎖定、點一下列 6 站', (function () {
         var el = q('#fromStation');
         el.click();
@@ -305,6 +314,9 @@ const selftestScript = `<script>
     step('自動查詢結果', function () {
       var s = stats();
       T('S06 受影響車次＝5（101/102/201/301/303）', s.t === '5', '實際 ' + s.t);
+      T('S06b 401 全車未受影響 → 整列不列（不出現「（無）」）',
+        !findRow('401') && q('#trainBody').textContent.indexOf('（無）') < 0,
+        findRow('401') ? '401 仍列出' : '');
       T('S07 受影響車長＝5（小林/大華/阿美/陳強/阿忠）', s.c === '5', '實際 ' + s.c);
       T('S08 緩衝不足＝0', s.s === '0', '實際 ' + s.s);
       T('S09 301 列存在且逆向（彰化→嘉義 14:00→15:00）', (function () {

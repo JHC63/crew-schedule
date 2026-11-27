@@ -402,6 +402,108 @@ eq('18f 未延誤時緩衝 86 分（正常）',
   }).next.status, 'ok');
 
 // ============================================================
+// 19. 2026/11/27 使用者回饋：路線折返車（554 潮州→花蓮）——
+//     全車首末站 45→70 是「南下」，但彰化–嘉義這一段是北上（順向）。
+//     方向必須用「區間進入端→離開端」的站序判定，不能用全車首末站。
+// ============================================================
+const STATIONS_554 = [
+  { id: '0900', name: '七堵', pos: 0 },
+  { id: '1000', name: '臺北', pos: 5 },
+  { id: '3360', name: '彰化', pos: 20 },
+  { id: '3410', name: '員林', pos: 25 },
+  { id: '4080', name: '嘉義', pos: 30 },
+  { id: '5000', name: '屏東', pos: 40 },
+  { id: '5050', name: '潮州', pos: 45 },
+  { id: '7360', name: '瑞芳', pos: 60 },
+  { id: '7000', name: '花蓮', pos: 70 }
+];
+const IDX_554 = CORE.makeIndex(STATIONS_554);
+const nameOf554 = (id) => { const s = STATIONS_554.find((x) => x.id === id); return s ? s.name : id; };
+const idOf554 = (name) => IDX_554.nameToId[CORE.normStn(name)];
+// 554：潮州 11:40/11:50 → 屏東 12:00/12:02 → 嘉義 13:00/13:10 → 彰化 13:50/14:00
+//      → 七堵 15:00/15:05 → 瑞芳 15:30/15:32 → 花蓮 16:00
+const T_554 = {
+  no: '554', type: '莒光', typeCode: '8', headsign: '往花蓮', extraTrain: false,
+  serviceDay: { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1, holiday: 1 },
+  note: '', stops: [
+    ['5050', 700, 710], ['5000', 720, 722], ['4080', 780, 790],
+    ['3360', 830, 840], ['0900', 900, 905], ['7360', 930, 932], ['7000', 960, 960]
+  ]
+};
+const tv554 = CORE.traverseSection(T_554, idOf554('彰化'), idOf554('嘉義'), IDX_554.posById, nameOf554);
+ok('19a 554 traverse 成功', !!tv554);
+eq('19b 方向＝順向（北上；全車首末站是「南下」，不可用）', tv554 && tv554.south, false);
+eq('19c 進入＝嘉義開車 790', tv554 && tv554.enter, 790);
+eq('19d 離開＝彰化到達 830', tv554 && tv554.exit, 830);
+eq('19e 進入端站序＝嘉義 30', tv554 && tv554.enterPos, 30);
+eq('19f 離開端站序＝彰化 20', tv554 && tv554.exitPos, 20);
+const r554a = CORE.classifyRider(
+  { title: '554', station: '潮州', toStation: '屏東' },
+  tv554, IDX_554, idOf554('彰化'), idOf554('嘉義'));
+eq('19g 潮州→屏東（事故前下車）→ 未受影響', r554a.affected, false);
+eq('19h 潮州→屏東 無延誤落點', r554a.delayOn, null);
+const r554b = CORE.classifyRider(
+  { title: '554', station: '屏東', toStation: '嘉義' },
+  tv554, IDX_554, idOf554('彰化'), idOf554('嘉義'));
+eq('19i 屏東→嘉義（進入端下車）→ 受影響', r554b.affected, true);
+eq('19j 延誤落在 alighting', r554b.delayOn, 'alighting');
+const r554c = CORE.classifyRider(
+  { title: '554', station: '彰化', toStation: '七堵' },
+  tv554, IDX_554, idOf554('彰化'), idOf554('嘉義'));
+eq('19k 彰化→七堵（離開端上車）→ boarding', r554c.delayOn, 'boarding');
+const r554d = CORE.classifyRider(
+  { title: '554', station: '潮州', toStation: '彰化' },
+  tv554, IDX_554, idOf554('彰化'), idOf554('嘉義'));
+eq('19l 潮州→彰化（貫穿區間）→ alighting', r554d.delayOn, 'alighting');
+
+// ============================================================
+// 20. 折返車「一端不停靠」：誰先到用時間比（不用全車方向）
+//     員林(25) 不停靠，內插自 嘉義 dep 790 → 彰化 arr 830 的中點 ＝ 810
+// ============================================================
+const tv554p = CORE.traverseSection(T_554, idOf554('員林'), idOf554('嘉義'), IDX_554.posById, nameOf554);
+ok('20a 員林–嘉義 traverse 成功（員林不停靠＝離開端推估）', !!tv554p && tv554p.enterStop && !tv554p.exitStop);
+eq('20b 進入＝嘉義開車 790（不是員林）', tv554p && tv554p.enter, 790);
+eq('20c 離開＝員林內插 810', tv554p && tv554p.exit, 810);
+eq('20d 方向＝順向', tv554p && tv554p.south, false);
+
+// ============================================================
+// 21. 起迄相同站（折返車也一樣）→ null
+// ============================================================
+eq('21a 嘉義→嘉義 → null',
+  CORE.traverseSection(T_554, idOf554('嘉義'), idOf554('嘉義'), IDX_554.posById, nameOf554), null);
+
+// ============================================================
+// 22. 反向折返鏡像：花蓮→潮州。全車首末站 70→45 是「北上」，
+//     但彰化–嘉義這一段是南下（逆向）
+// ============================================================
+const T_554_REV = {
+  no: '555', type: '莒光', typeCode: '8', headsign: '往潮州', extraTrain: false,
+  serviceDay: { mon: 1, tue: 1, wed: 1, thu: 1, fri: 1, sat: 1, sun: 1, holiday: 1 },
+  note: '', stops: [
+    ['7000', 700, 700], ['7360', 730, 732], ['0900', 800, 805],
+    ['3360', 850, 860], ['4080', 890, 900], ['5000', 930, 932], ['5050', 950, 950]
+  ]
+};
+const tvRev = CORE.traverseSection(T_554_REV, idOf554('彰化'), idOf554('嘉義'), IDX_554.posById, nameOf554);
+eq('22a 方向＝逆向（南下）', tvRev && tvRev.south, true);
+eq('22b 進入＝彰化開車 860', tvRev && tvRev.enter, 860);
+eq('22c 離開＝嘉義到達 890', tvRev && tvRev.exit, 890);
+eq('22d 進入端站序＝彰化 20', tvRev && tvRev.enterPos, 20);
+eq('22e 離開端站序＝嘉義 30', tvRev && tvRev.exitPos, 30);
+const rRevA = CORE.classifyRider(
+  { title: '555', station: '花蓮', toStation: '七堵' },
+  tvRev, IDX_554, idOf554('彰化'), idOf554('嘉義'));
+eq('22f 花蓮→七堵（事故前下車）→ 未受影響', rRevA.affected, false);
+const rRevB = CORE.classifyRider(
+  { title: '555', station: '屏東', toStation: '潮州' },
+  tvRev, IDX_554, idOf554('彰化'), idOf554('嘉義'));
+eq('22g 屏東→潮州（事故後上車）→ boarding', rRevB.delayOn, 'boarding');
+const rRevC = CORE.classifyRider(
+  { title: '555', station: '彰化', toStation: '嘉義' },
+  tvRev, IDX_554, idOf554('彰化'), idOf554('嘉義'));
+eq('22h 彰化→嘉義（區間內）→ alighting', rRevC.delayOn, 'alighting');
+
+// ============================================================
 // 結果
 // ============================================================
 console.log('PASS ' + pass + ' / FAIL ' + fail);

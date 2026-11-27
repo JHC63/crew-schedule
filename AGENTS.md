@@ -74,10 +74,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\test\build-api-test.ps1
 powershell -NoProfile -ExecutionPolicy Bypass -File .\test\build-preview.ps1
 & 'C:\Program Files\Google\Chrome\Application\chrome.exe' --headless=new --disable-gpu --allow-file-access-from-files --window-size=500,900 --virtual-time-budget=45000 --dump-dom "file:///C:/Users/User/Documents/預設專案/test/_preview.html#test"
 
-# 5. 受影響列車：純邏輯測試（57 項）；全過輸出 AFF CORE ALL PASSED
+# 5. 受影響列車：純邏輯測試（126 項）；全過輸出 AFF CORE ALL PASSED
 node test\run-affected.js
 
-# 6. 受影響列車：頁面測試（34 項；組頁＋headless Chrome）；檢查 <title>AFF PAGE ALL PASSED</title>
+# 6. 受影響列車：頁面測試（64 項；組頁＋headless Chrome）；檢查 <title>AFF PAGE ALL PASSED</title>
 node test\run-affected-page.js
 
 # 7. 受影響列車：重產時刻表（改了 CSV／補了 overrides 之後）
@@ -170,6 +170,15 @@ cmd /c "node tools\build-timetable.js --csv `"C:\Users\User\Documents\佳合資�
 - **L2 邊界（2026/11/26 使用者回饋改）**：下車站在進入端**之前**才標「未受影響」；
   **下車站＝進入端算受影響（alighting）**——3207 延誤 90 時在彰化（進入端）下車的車長抵達也延後 90，
   要看得到「接不上 2173」這條鏈。改這條規則要連動 `test/run-affected.js` 案例 5b／9b／9e／18。
+- **方向（2026/11/27）**：`traverseSection` 回傳 `enterPos`/`exitPos`，`south` 用**區間進出端站序**判定
+  （`enterPos < exitPos`＝南下／逆向），**不可用全車首末站**——554 潮州→花蓮，但彰化–嘉義是北上（順向）。
+  一端不停靠時誰先到用**時間比**（停靠端比開車時間、非停靠端用內插值）。
+  改這條要連動 `test/run-affected.js` 案例 19～22。
+- **全車無受影響車長 → 整列不列（2026/11/27）**：某車經過區間＋時段，但車上沒有任何受影響車長
+  （且無「需人工確認」）→ 該車**完全不列**，不顯示「（無）」——例：554 的車長只便乘潮州→屏東，
+  彰化–嘉義與他無關且無後續值乘。時間不一致警告也只對列出的車次檢查。
+- **指定車次方向（2026/11/27）**：每條值乘腿用**該腿**上下車站序判方向（`legSouth`），
+  多腿不同向時摘要顯示「多方向」，站名對不到顯示「—」。
 - **兩種查詢方式（2026/11/26）**：表單上方 radio 切換「起訖區間／指定車次」，換模式清空上一次結果。
   - 起訖站是**自刻 combobox**（點一下列全部 131 站、打字過濾、站碼可搜、「台北」找得到「臺北」；
     邏輯在 core `filterStations`/`resolveStation`）。方向值 `both`/`forward`（順向＝北上）/`reverse`（逆向＝南下），

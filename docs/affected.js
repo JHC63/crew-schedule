@@ -689,8 +689,15 @@
       (crew.byTrain[no] || []).forEach(function (seg) {
         var st = CORE.classifyRider(seg, tv, state.index, state.from, state.to);
         riders.push({ seg: seg, affected: st.affected, delayOn: st.delayOn, unknownStation: !!st.unknownStation });
-        checkTimeMismatch(train, seg, warnings);
       });
+
+      // 2026/11/27 使用者定案：全車沒有任何受影響車長（且無需人工確認）→ 整列不列，
+      // 不再顯示「（無）」。例：554 的車長只便乘潮州→屏東，彰化–嘉義與他無關且無後續值乘。
+      var anyAffected = riders.some(function (r) { return r.affected || r.unknownStation; });
+      if (!anyAffected) return;
+
+      // §6.4 時間不一致警告：只對列出的車次檢查
+      riders.forEach(function (r) { checkTimeMismatch(train, r.seg, warnings); });
 
       // 狀態（§6.5、§7.5）：推估＋時段邊界切進區間 → 可能受影響
       var status = 'normal';
@@ -760,21 +767,6 @@
     state.tt.trains.forEach(function (t) { if (t.no === no) ttTrain = t; });
     var ordered = CORE.orderLegs((crew.byTrain[no] || []).slice());
     var delay = Number(state.delays[no]) || 0;
-    var south = null;
-    if (ttTrain) {
-      var p0 = state.index.posById[ttTrain.stops[0][0]];
-      var p1 = state.index.posById[ttTrain.stops[ttTrain.stops.length - 1][0]];
-      if (p0 != null && p1 != null) south = p1 > p0;
-    }
-    if (south == null && ordered.length) {
-      var first = ordered[0].seg;
-      var last = ordered[ordered.length - 1].seg;
-      var idA = state.index.nameToId[normStn(first.station)];
-      var idB = state.index.nameToId[normStn(last.toStation)];
-      var pa = idA != null ? state.index.posById[idA] : null;
-      var pb = idB != null ? state.index.posById[idB] : null;
-      if (pa != null && pb != null) south = pb > pa;
-    }
     var legs = [], chains = [], crewSeen = {};
     var shortCount = 0;
     ordered.forEach(function (item, i) {
@@ -800,7 +792,7 @@
       };
       chains.push(chain);
       legs.push({
-        seg: seg, train: ttTrain, south: south, delay: delay, label: label,
+        seg: seg, train: ttTrain, south: legSouth(seg), delay: delay, label: label,
         handover: item.handover, handoverBefore: handoverBefore, chain: chain
       });
       crewSeen[seg.group + '\u0000' + seg.name] = true;
@@ -847,6 +839,17 @@
       title: s.title, station: s.station, toStation: s.toStation,
       dep: minOfDay(s.startMs), arr: minOfDay(s.endMs)
     };
+  }
+
+  // 指定車次：值乘腿方向用「該腿」上下車站序判定（2026/11/27），
+  // 不用全車首末站（554 潮州→花蓮，但彰化–嘉義是北上）；站名對不到 → null（顯示 —）
+  function legSouth(seg) {
+    var idA = state.index.nameToId[normStn(seg.station)];
+    var idB = state.index.nameToId[normStn(seg.toStation)];
+    var pa = idA != null ? state.index.posById[idA] : null;
+    var pb = idB != null ? state.index.posById[idB] : null;
+    if (pa == null || pb == null || pa === pb) return null;
+    return pb > pa;
   }
 
   // L3：單一受影響車長的影響鏈（組裝轉接 core.buildChain；§5 Step 4、§13 邊界）
@@ -991,8 +994,7 @@
     var first = res.legs[0].seg;
     var last = res.legs[res.legs.length - 1].seg;
     var type = t ? shortType(t.type) : '—';
-    var south = res.legs[0].south;
-    var dir = south == null ? '—' : (south ? '逆向' : '順向');
+    var dir = legsDirLabel(res.legs);
     var run = t
       ? stopName(t.stops[0][0]) + '→' + stopName(t.stops[t.stops.length - 1][0])
       : first.station + '→' + last.toStation;
@@ -1023,7 +1025,7 @@
       rows.push('<tr class="leg-row" data-leg="' + i + '">' +
         '<td class="c-no"><b>' + esc(res.trainNo) + '</b> <span class="badge muted">第 ' + (i + 1) + ' 腿</span></td>' +
         '<td>' + esc(type) + '</td>' +
-        '<td>' + esc(dir) + '</td>' +
+        '<td>' + esc(dirLabel(leg.south)) + '</td>' +
         '<td>' + esc(seg.station + '→' + seg.toStation) + '</td>' +
         '<td>' + esc(fmtMin(leg.chain.dep)) + '</td>' +
         '<td>' + esc(fmtMin(leg.chain.arr)) + '</td>' +
@@ -1060,6 +1062,18 @@
     return i > 0 ? s.slice(0, i) : s;
   }
 
+  // 方向顯示：south＝站序遞增（南下）→ 逆向；站名對不到 → —
+  function dirLabel(south) { return south == null ? '—' : (south ? '逆向' : '順向'); }
+  // 多腿摘要：全部同向顯示該方向，不同向顯示「多方向」（2026/11/27：每腿各自判方向）
+  function legsDirLabel(legs) {
+    if (!legs || !legs.length) return '—';
+    var first = legs[0].south;
+    for (var i = 1; i < legs.length; i++) {
+      if (legs[i].south !== first) return '多方向';
+    }
+    return dirLabel(first);
+  }
+
   function delayCell(no, delay) {
     return '<span class="delay-wrap">' +
       '<input type="number" class="delay-input" data-no="' + esc(no) + '" min="0" max="600" step="1" value="' + Number(delay || 0) + '">' +
@@ -1072,7 +1086,9 @@
   }
 
   function crewCell(riders, trainNo) {
-    if (!riders.length) return '<span class="muted">（無）</span>';
+    // 2026/11/27 起：全車無受影響車長的車次整列不列（computeResults 過濾），
+    // 這裡理論上不會收到空陣列；保險起見回空字串（不顯示「無」）
+    if (!riders.length) return '';
     return riders.map(function (r) {
       var tag;
       if (r.unknownStation) tag = '<span class="badge muted" title="班表站名對不到時刻表站碼">需人工確認</span>';
@@ -1335,11 +1351,11 @@
     lines.push(['車次', '車種', '方向', '起訖', '進入', '離開', '延誤(分)', '值乘車長', '狀態'].join(','));
     res.trains.forEach(function (item) {
       var t = item.train;
-      var crew = item.riders.length ? item.riders.map(function (r) {
+      var crew = item.riders.map(function (r) {
         return r.seg.name + '(' + r.seg.group + ')' +
           (r.unknownStation ? '[需人工確認]' : !r.affected ? '[未受影響]' :
             r.delayOn === 'boarding' ? '[上車延誤]' : '[受影響]');
-      }).join(' ') : '（無）';
+      }).join(' ');
       lines.push([
         t.no, t.type, item.tv.south ? '逆向' : '順向',
         stopName(t.stops[0][0]) + '→' + stopName(t.stops[t.stops.length - 1][0]),
@@ -1363,7 +1379,7 @@
   function exportTrainCsv(res) {
     if (!res.legs.length) return;
     var t = res.train;
-    var dir = res.legs[0].south == null ? '—' : (res.legs[0].south ? '逆向' : '順向');
+    var dir = legsDirLabel(res.legs);
     var run = t
       ? stopName(t.stops[0][0]) + '→' + stopName(t.stops[t.stops.length - 1][0])
       : res.legs[0].seg.station + '→' + res.legs[res.legs.length - 1].seg.toStation;
@@ -1377,7 +1393,7 @@
         : leg.handoverBefore && leg.handoverBefore.sameCrew ? '續乘'
         : i === res.legs.length - 1 ? '接班（末腿）' : '接班';
       lines.push([
-        String(i + 1), res.trainNo, t ? shortType(t.type) : '', dir,
+        String(i + 1), res.trainNo, t ? shortType(t.type) : '', dirLabel(leg.south),
         seg.station + '→' + seg.toStation,
         fmtMin(leg.chain.dep), fmtMin(leg.chain.arr), leg.delay,
         seg.name + '(' + seg.group + ')' + (leg.label ? ' 班別 ' + leg.label : ''), status

@@ -180,11 +180,14 @@
   // ---------- L1：列車在 [fromId, toId] 區間的進入／離開 ----------
   // 進入端／離開端依列車行進方向決定（停靠序列先遇到誰），不固定表單左右（§5 Step 2.2）。
   // 端點不停靠 → 內插推估，標 enterStop/exitStop = false（§7）。
-  // 回傳 { enter, exit, enterStop, exitStop, south, approx: { enter?, exit? } } 或 null（不經過）。
+  // 方向（2026/11/27）：以「區間進入端→離開端」的站序判定（enterPos < exitPos ＝ 站序遞增＝南下），
+  // **不用全車首末站**——554 潮州→花蓮，但彰化–嘉義這一段是北上（順向）。
+  // 回傳 { enter, exit, enterStop, exitStop, south, enterPos, exitPos, approx: { enter?, exit? } } 或 null（不經過）。
   function traverseSection(train, fromId, toId, posById, nameOf) {
     var stops = train.stops;
     var pFrom = posById[fromId], pTo = posById[toId];
     if (pFrom == null || pTo == null) return null;
+    if (fromId === toId) return null;
     var n = stops.length;
     if (n < 2) return null;
     var stopPos = new Array(n);
@@ -193,70 +196,71 @@
       if (p == null) return null;
       stopPos[i] = p;
     }
-    // 行進方向：沿線 pos 遞增＝南下（站碼排序：基隆→枋寮）
-    var south = stopPos[n - 1] > stopPos[0];
     var iFrom = -1, iTo = -1;
     for (var j = 0; j < n; j++) {
       if (stops[j][0] === fromId && iFrom < 0) iFrom = j;
       if (stops[j][0] === toId && iTo < 0) iTo = j;
     }
-    var enter, exit, enterStop, exitStop, approx = {};
+    var enter, exit, enterStop, exitStop, approx = {}, fromIsEnter;
     if (iFrom >= 0 && iTo >= 0) {
       // 兩端都停靠：行進順序＝index 小者先遇到
-      var first = Math.min(iFrom, iTo), last = Math.max(iFrom, iTo);
-      if (first === last) return null;
-      enter = stops[first][2];     // 進入端開車時間
-      exit = stops[last][1];       // 離開端到達時間
+      if (iFrom === iTo) return null;
+      fromIsEnter = iFrom < iTo;
+      enter = fromIsEnter ? stops[iFrom][2] : stops[iTo][2];   // 進入端開車時間
+      exit = fromIsEnter ? stops[iTo][1] : stops[iFrom][1];    // 離開端到達時間
       enterStop = true;
       exitStop = true;
     } else {
-      var tFrom = iFrom >= 0 ? null : interpolateAt(stops, stopPos, pFrom);
-      var tTo = iTo >= 0 ? null : interpolateAt(stops, stopPos, pTo);
-      if (iFrom < 0 && tFrom == null) return null;
-      if (iTo < 0 && tTo == null) return null;
-      var enterPos = south ? Math.min(pFrom, pTo) : Math.max(pFrom, pTo);
-      var fromIsEnter = pFrom === enterPos;
-      if (fromIsEnter) {
-        enter = iFrom >= 0 ? stops[iFrom][2] : tFrom;
-        exit = iTo >= 0 ? stops[iTo][1] : tTo;
-        enterStop = iFrom >= 0;
-        exitStop = iTo >= 0;
-        if (!enterStop) approx.enter = passInfo(stops, stopPos, pFrom, nameOf);
-        if (!exitStop) approx.exit = passInfo(stops, stopPos, pTo, nameOf);
-      } else {
-        enter = iTo >= 0 ? stops[iTo][2] : tTo;
-        exit = iFrom >= 0 ? stops[iFrom][1] : tFrom;
-        enterStop = iTo >= 0;
-        exitStop = iFrom >= 0;
-        if (!enterStop) approx.enter = passInfo(stops, stopPos, pTo, nameOf);
-        if (!exitStop) approx.exit = passInfo(stops, stopPos, pFrom, nameOf);
-      }
+      // 一端（或兩端）不停靠 → 內插（§7）。誰先到＝進入端：路線可能折返
+      // （554 彰化–嘉義是北上、七堵之後轉東線），站序不可靠，用時間比——
+      // 停靠端比「開車時間」，非停靠端用內插通過時間。
+      var depFrom = iFrom >= 0 ? stops[iFrom][2] : interpolateAt(stops, stopPos, pFrom);
+      var depTo = iTo >= 0 ? stops[iTo][2] : interpolateAt(stops, stopPos, pTo);
+      if (iFrom < 0 && depFrom == null) return null;
+      if (iTo < 0 && depTo == null) return null;
+      fromIsEnter = depFrom <= depTo;
+      enter = fromIsEnter ? depFrom : depTo;
+      exit = fromIsEnter ? (iTo >= 0 ? stops[iTo][1] : depTo)
+                         : (iFrom >= 0 ? stops[iFrom][1] : depFrom);
+      enterStop = fromIsEnter ? iFrom >= 0 : iTo >= 0;
+      exitStop = fromIsEnter ? iTo >= 0 : iFrom >= 0;
+      if (!enterStop) approx.enter = passInfo(stops, stopPos, fromIsEnter ? pFrom : pTo, nameOf);
+      if (!exitStop) approx.exit = passInfo(stops, stopPos, fromIsEnter ? pTo : pFrom, nameOf);
     }
-    return { enter: enter, exit: exit, enterStop: enterStop, exitStop: exitStop, south: south, approx: approx };
+    var enterPos = fromIsEnter ? pFrom : pTo;
+    var exitPos = fromIsEnter ? pTo : pFrom;
+    return {
+      enter: enter, exit: exit, enterStop: enterStop, exitStop: exitStop,
+      south: enterPos < exitPos, enterPos: enterPos, exitPos: exitPos, approx: approx
+    };
   }
 
   // ---------- L2：車長與事故區間的關係（§5 Step 3） ----------
   // seg = staffSchedule 的 train segment（station=上車、toStation=下車，班表站名）
   // 回傳 { affected, delayOn: 'alighting'|'boarding'|null, unknownStation? }
-  //   - 下車站序 < 進入端 → 未受影響（車列入、車長標未受影響）
+  //   - 下車站序 < 進入端 → 未受影響（2026/11/27 起：全車都沒人受影響 → 整列不列，前端處理）
   //   - 下車站序 ＝ 進入端 → 受影響（延誤落在 alighting）
   //     （2026/11/26 使用者回饋改：3207 延誤 90 時，在彰化（進入端）下車的車長
   //      抵達也延後 90 → 接不上下一班。延誤回堵會漫延到進入端之前，寧可多提醒。）
   //   - 上車站序 ≥ 離開端 → 受影響（延誤落在 boarding）
   //   - 其他 → 受影響（延誤落在 alighting）
+  // 進入／離開端直接用 tv.enterPos/exitPos（traverseSection 2026/11/27 起回傳）；
+  // 舊呼叫端沒有這兩個欄位時才用 tv.south ＋起訖站序回推（相容）。
   function classifyRider(seg, tv, index, fromId, toId) {
     var posById = index.posById, nameToId = index.nameToId;
     var idUp = nameToId[normStn(seg.station)];
     var idDown = nameToId[normStn(seg.toStation)];
     if (idUp == null || idDown == null) return { affected: false, unknownStation: true };
     var pUp = posById[idUp], pDown = posById[idDown];
-    var pFrom = posById[fromId], pTo = posById[toId];
-    if (pUp == null || pDown == null || pFrom == null || pTo == null) {
-      return { affected: false, unknownStation: true };
+    if (pUp == null || pDown == null) return { affected: false, unknownStation: true };
+    var enterPos = tv.enterPos, exitPos = tv.exitPos;
+    if (enterPos == null || exitPos == null) {
+      var pFrom = posById[fromId], pTo = posById[toId];
+      if (pFrom == null || pTo == null) return { affected: false, unknownStation: true };
+      enterPos = tv.south ? Math.min(pFrom, pTo) : Math.max(pFrom, pTo);
+      exitPos = tv.south ? Math.max(pFrom, pTo) : Math.min(pFrom, pTo);
     }
     var south = tv.south;
-    var enterPos = south ? Math.min(pFrom, pTo) : Math.max(pFrom, pTo);
-    var exitPos = south ? Math.max(pFrom, pTo) : Math.min(pFrom, pTo);
     var offBefore = south ? (pDown < enterPos) : (pDown > enterPos);
     if (offBefore) return { affected: false, delayOn: null };
     var boardAfter = south ? (pUp >= exitPos) : (pUp <= exitPos);

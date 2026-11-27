@@ -304,3 +304,38 @@ baseline 留檔：`test/results-baseline.txt`、`%TEMP%\opencode\run-api-baselin
 7. **`git commit -m "中文"` 會被 PowerShell 以 Big5 傳參**→ 儲存的訊息亂碼（git log 與 %B 讀出都是）。
    中文 commit 訊息一律：Node 寫 UTF-8 無 BOM 訊息檔 → `git commit -F <file>`（amend 同理）。
    驗證用 `git cat-file commit HEAD` 再以 UTF-8 解碼（PowerShell `>` 重導向會轉 UTF-16，別用它驗）。
+
+---
+
+## 8. 2026/11/27：受影響列車「方向＋列車過濾」修正（使用者回饋）
+
+**回饋**：彰化–嘉義 14:00–16:00 雙向，554 不應出現——A車長只便乘潮州→屏東，彰化–嘉義與他無關，
+後續也沒有值乘車長；且列車列出邏輯應是「先依區間＋時段篩車，再配對母體車長」。
+
+**根因**：`traverseSection` 用**全車首末站**判方向（`stopPos[n-1] > stopPos[0]`）。554 停靠序
+潮州(123)→…→嘉義(81)→彰化(65)→…→七堵(3)→瑞芳(147)→花蓮(135)，首末 123→135 被判「南下」，
+但彰化–嘉義這一段實際是**北上**；`classifyRider` 再用錯的方向回推進入／離開端，
+把 554 的便乘腿誤判成 boarding → 長出假的 554→134 影響鏈。
+
+**修改**（只動 `docs/affected-core.js`、`docs/affected.js`＋測試＋文件；GAS／10 個 action／timetable.json 不動）：
+- `traverseSection`：回傳 `enterPos`/`exitPos`，`south = enterPos < exitPos`（**區間進出端站序**，非全車方向）；
+  一端不停靠時誰先到改用**時間比**（停靠端比開車時間、非停靠端用內插值——折返時站序不可靠）；
+  `fromId === toId` 直接 null。
+- `classifyRider`：直接用 `tv.enterPos`/`exitPos`（舊呼叫端沒有才 fallback 用 `tv.south` 回推）。
+- `computeResults`：L1→L2 後若全車 `riders` 都 `affected=false` 且無 `unknownStation` → **整列不列**
+  （不顯示「（無）」）；`checkTimeMismatch` 移到過濾後（只警告列出的車次）；`crewCell`／CSV 的「（無）」移除。
+- 指定車次：新增 `legSouth`（每腿用該腿上下車站序判方向，不用全車首末站）；
+  `renderTrainLegs`／`exportTrainCsv` 每腿顯示自己的方向，多腿不同向摘要「多方向」
+  （新增 `dirLabel`/`legsDirLabel`）。
+
+**測試**：`test/run-affected.js` 101→**126 項**（新增案例 19～22：554 形狀折返、一端不停靠時間比、
+同站 null、反向折返鏡像）；`test/run-affected-page.js` 63→**64 項**
+（fixture 加 401＋阿明——唯一車長在進入端前下車 → 401 整列不列，S03 車次 meta 10→11 筆、S06b）。
+兩套全過。**以真實 API 驗證**（2026/11/27 彰化→嘉義 14:00–16:00 雙向）：**17 車次**（原 18），
+554 消失、134 保留（世富 屏東→嘉義＝alighting，影響鏈只剩 134→當日最後一班）。
+
+**文件**：`affected-plan.md` §3／§5 Step 2、3／§5.5-6／§13／§14／§16 步驟 10；
+`AGENTS.md` 受影響列車節新增「方向」「全車無受影響→整列不列」「指定車次方向」三條＋測試項數更新。
+
+**剩餘（不變）**：人工補 `tools/timetable-overrides.json`（18 筆）→ 重跑建置 → push Pages 上線；
+本次改動也需 push `docs/` 上 Pages 才會生效（GitHub Pages source = `main` + `/docs`）。
